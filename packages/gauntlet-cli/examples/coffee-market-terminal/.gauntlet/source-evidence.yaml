@@ -1,0 +1,14 @@
+claims:
+  - id: brief-latest-price
+    source: { type: other, locator: objective brief }
+    observation: An analyst needs to see the latest normalized coffee price with provenance.
+    classification: observed
+    confidence: high
+    falsifier: The target workflow does not require current price visibility.
+  - id: production-provenance
+    source: { type: other, locator: production safety analysis }
+    observation: Every displayed market observation must identify its source and retrieval context.
+    classification: production-required
+    confidence: high
+    basis: Market decisions cannot safely rely on unattributed values.
+    falsifier: The product is explicitly constrained to non-decision educational mock data.
