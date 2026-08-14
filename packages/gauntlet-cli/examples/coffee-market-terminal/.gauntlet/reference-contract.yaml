@@ -1,0 +1,4 @@
+inputs: [dated coffee price observations]
+transformations: [CSV parsing, numeric normalization, latest-date selection]
+outputs: [provenance-aware JSON, human-readable web view]
+invariants: [price is numeric, provenance accompanies API data]
