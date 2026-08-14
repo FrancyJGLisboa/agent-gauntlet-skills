@@ -23,6 +23,20 @@ Create all required files under `.gauntlet/`.
 
 Create an `evidence/` directory only when local evidence artifacts are generated. Reference external evidence by stable URL and retrieval date rather than copying it unnecessarily.
 
+## Evidence-to-product reconstruction
+
+When `manifest.yaml` declares `reconstruction.mode` as `youtube_demonstration`, `blog_description`, `social_discussion`, `screenshots`, `live_product`, `research_paper`, or `mixed_evidence`, also require:
+
+| File | Required content |
+|---|---|
+| `source-evidence.yaml` | Located observations, claim classes, confidence, basis, corroboration and falsifiers |
+| `product-reconstruction.yaml` | Capabilities separated by observed, inferred, production-required, speculative and prohibited origin |
+| `experience-contract.yaml` | Personas, critical journeys, visible states and success evidence |
+| `production-readiness.yaml` | Functional, reliability, security, operations, distribution and evidence gates |
+| `claim-traceability.yaml` | Claim-to-capability-to-verification links |
+
+Never make speculative capabilities required. Require independent corroboration before treating social posts or comments as high-confidence facts. Trace every observed, corroborated, or production-required claim to verification.
+
 When the Gauntlet CLI is available, its validation result is authoritative for structural, graph, retry, architecture-record, distribution-lifecycle, evidence-attachment, and state-transition invariants. Semantic critics remain responsible for whether the recorded evidence actually supports the decisions.
 
 Acceptance tests must use `command` as an argv array, with optional `cwd`, `timeout_ms`, and `env_allowlist`. The runtime fingerprints every required pack file at initialization; changing any compiled contract invalidates assignments and evidence until the pack is deliberately recompiled.
