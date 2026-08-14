@@ -1,0 +1,6 @@
+functional: { critical_journeys_tested: true, production_path_uses_labeled_data: true }
+reliability: { deterministic_tests: true, bounded_failure_behavior: true }
+security: { no_embedded_secrets: true, input_surface_minimized: true }
+operations: { health_startup_tested: true, structured_artifact_evidence: true }
+distribution: { clean_install: true, rollback_contract: true }
+evidence: { cli_captured: true, clean_artifact_test: true }
