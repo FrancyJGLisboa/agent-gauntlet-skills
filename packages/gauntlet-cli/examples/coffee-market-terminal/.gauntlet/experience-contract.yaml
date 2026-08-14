@@ -1,0 +1,6 @@
+journeys:
+  - id: analyst-checks-market
+    persona: coffee analyst
+    trigger: Needs the latest available market observation.
+    steps: [open terminal, inspect latest price, inspect provenance]
+    success_evidence: [price and unit are visible, provenance accompanies the API response]
