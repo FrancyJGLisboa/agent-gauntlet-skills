@@ -4,12 +4,14 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { runGauntlet } from '../src/orchestrator.js';
+import { spawnSync } from 'node:child_process';
+import { deliverGauntlet, runGauntlet } from '../src/orchestrator.js';
 
 const here=path.dirname(fileURLToPath(import.meta.url));
 function project(){
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'gauntlet-run-'));
   fs.cpSync(path.resolve(here,'../examples/coffee-market-terminal'),root,{recursive:true});
+  spawnSync('git',['init','-q'],{cwd:root});spawnSync('git',['add','.'],{cwd:root});spawnSync('git',['-c','user.name=Test','-c','user.email=test@example.test','commit','-qm','fixture'],{cwd:root});
   return root;
 }
 test('one invocation completes builder-critic-verifier loops and writes a passport',()=>{
@@ -34,4 +36,27 @@ test('critic repair verdict automatically returns work to builder',()=>{
   const result=runGauntlet({manifest:path.join(root,'.gauntlet/manifest.yaml'),adapter});
   assert.equal(result.completed,true);assert.equal(builders,3);
   assert.equal(result.status.slices.find(s=>s.id==='core').repairs,1);
+});
+
+test('verified changes integrate and interrupted building resumes',()=>{
+  const root=project();let fail=true,edited=false;
+  const adapter={name:'mock',invoke(input){
+    if(input.role==='builder'&&fail){fail=false;throw new Error('simulated process loss');}
+    if(input.role==='builder'&&!edited){fs.appendFileSync(path.join(input.cwd,'src/market.js'),'\n// isolated gauntlet change\n');edited=true;}
+    return {verdict:input.role==='builder'?'complete':'pass',summary:'ok',reason:'passed',largest_gap:'none',changed_files:[]};
+  }};
+  assert.throws(()=>runGauntlet({manifest:path.join(root,'.gauntlet/manifest.yaml'),adapter}),/simulated process loss/);
+  const result=runGauntlet({manifest:path.join(root,'.gauntlet/manifest.yaml'),adapter});
+  assert.equal(result.completed,true);assert.match(fs.readFileSync(path.join(root,'src/market.js'),'utf8'),/isolated gauntlet change/);
+  assert.equal(spawnSync('git',['status','--porcelain','--untracked-files=no'],{cwd:root,encoding:'utf8'}).stdout,'');
+});
+test('out-of-scope builder changes are rejected',()=>{
+  const root=project(),adapter={name:'mock',invoke(input){if(input.role==='builder')fs.writeFileSync(path.join(input.cwd,'forbidden.txt'),'no');return {verdict:input.role==='builder'?'complete':'pass',summary:'',reason:'',largest_gap:'',changed_files:[]};}};
+  assert.throws(()=>runGauntlet({manifest:path.join(root,'.gauntlet/manifest.yaml'),adapter}),e=>e.code==='SCOPE_VIOLATION');
+});
+test('deliver compiles a missing pack and runs it in one invocation',()=>{
+  const root=project(),backup=path.join(root,'pack-backup');fs.renameSync(path.join(root,'.gauntlet'),backup);let compiled=false;
+  const adapter={name:'mock',invoke(input){if(input.role==='compiler'){fs.renameSync(backup,path.join(root,'.gauntlet'));compiled=true;return {verdict:'complete',summary:'compiled',reason:'',largest_gap:'',changed_files:[]};}return {verdict:input.role==='builder'?'complete':'pass',summary:'ok',reason:'passed',largest_gap:'none',changed_files:[]};}};
+  const result=deliverGauntlet({request:'Build the reference product',manifest:path.join(root,'.gauntlet/manifest.yaml'),adapter});
+  assert.equal(compiled,true);assert.equal(result.completed,true);
 });
