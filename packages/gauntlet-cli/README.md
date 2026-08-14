@@ -15,3 +15,5 @@ npx gauntlet transition slice-id building --token CAPABILITY --manifest .gauntle
 The engine stores state transactionally in `.gauntlet/run-state.sqlite`. It fingerprints and freezes the pack, executes declared commands itself, records environment and Git metadata, hashes outputs, and binds capabilities to a role, slice, fingerprint, and expiry. It rejects stale or externally manufactured evidence. A builder cannot pass its own slice, dependencies must pass before building, and repair limits cannot exceed three.
 
 Release authority requires an HMAC produced with `GAUNTLET_AUTHORITY_SECRET`, which must remain outside agent context. The CLI prepares and verifies releases but does not publish automatically.
+
+When a manifest declares a YouTube, blog, social, screenshot, live-product, paper, or mixed-evidence reconstruction mode, validation additionally requires source evidence, product reconstruction, experience, production-readiness, and claim-traceability contracts. High-confidence social claims require corroboration, speculative capabilities cannot become required scope, and material claims must terminate in verification.
