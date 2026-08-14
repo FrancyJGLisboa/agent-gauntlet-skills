@@ -11,6 +11,49 @@ Portable Agent Skills that turn vague requests into evidence-grounded execution 
 vague request -> compile-gauntlet -> .gauntlet/ pack -> run-gauntlet -> verified implementation
 ```
 
+## Install from inside the terminal UI
+
+### Codex TUI
+
+Run these directly in a Codex session:
+
+```text
+$skill-installer https://github.com/FrancyJGLisboa/agent-gauntlet-skills/tree/main/skills/compile-gauntlet
+$skill-installer https://github.com/FrancyJGLisboa/agent-gauntlet-skills/tree/main/skills/run-gauntlet
+```
+
+Then open `/skills` to verify both skills.
+
+### Claude Code TUI
+
+The repository is also a Claude Code plugin marketplace. Run:
+
+```text
+/plugin marketplace add FrancyJGLisboa/agent-gauntlet-skills
+/plugin install agent-gauntlet@agent-gauntlet-skills
+```
+
+If the installation summary requests it, run `/reload-plugins`. Then open `/skills` and invoke `/compile-gauntlet`.
+
+### GitHub Copilot CLI TUI
+
+If the repository is already cloned, add its skill directory from inside Copilot CLI:
+
+```text
+/skills add /absolute/path/to/agent-gauntlet-skills/skills
+/skills reload
+/skills info compile-gauntlet
+```
+
+For a remote URL, GitHub currently documents installation from the surrounding terminal:
+
+```bash
+copilot skill add https://github.com/FrancyJGLisboa/agent-gauntlet-skills/tree/main/skills/compile-gauntlet
+copilot skill add https://github.com/FrancyJGLisboa/agent-gauntlet-skills/tree/main/skills/run-gauntlet
+```
+
+Return to the TUI and run `/skills reload`. This distinction avoids relying on undocumented remote-URL behavior for the interactive `/skills add` command.
+
 ## Fastest installation
 
 ### macOS, Linux, or WSL
