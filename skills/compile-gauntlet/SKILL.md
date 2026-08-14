@@ -1,6 +1,6 @@
 ---
 name: compile-gauntlet
-description: Convert vague goals, reference repositories, target data sources, or adaptation requests into complete agent-executable Gauntlet Packs. Use before implementation when requirements are underspecified, a repository must be pivoted to new data or domains, acceptance criteria are missing, or agents need an evidence-grounded builder-critic workflow without relying on human technical judgment. Do not use merely to execute an already complete Gauntlet Pack.
+description: Convert vague goals, reference repositories, YouTube demonstrations, blogs, social discussions, screenshots, live products, papers, target data sources, or adaptation requests into complete agent-executable Gauntlet Packs. Use before implementation when requirements are underspecified, public evidence must be reconstructed into an independent production-grade product, a repository must be pivoted to new data or domains, acceptance criteria are missing, or agents need an evidence-grounded builder-critic workflow without relying on human technical judgment. Do not use merely to execute an already complete Gauntlet Pack.
 ---
 
 # Compile Gauntlet
@@ -23,6 +23,8 @@ Produce an executable specification, not advice. Treat the user's wording as noi
 
 Identify the goal, reference implementation, target environment, target sources, available artifacts, and authorization limits. Record missing access as a blocker; never invent unseen repository or source behavior.
 
+When the reference is a video, blog, social discussion, screenshot, live product, paper, or mixed public evidence, read [evidence-reconstruction.md](references/evidence-reconstruction.md). Acquire legally accessible transcripts, frames, page sections, screenshots, demonstrations, corrections, and comments. Preserve URL plus timestamp, page, section, frame, or post locator for every material observation. Reconstruct capabilities independently; do not copy protected branding, licensed content, private code, or bypass access controls.
+
 ### 2. Generate independent interpretations
 
 When the host supports agents, delegate at least three independent, read-only investigations with fresh context:
@@ -42,6 +44,8 @@ Run the reference when safely possible. Extract inputs, outputs, transformations
 For every target source, capture access method, schema, identifiers, units, geography, temporal semantics, release cadence, revision policy, missing-value behavior, coverage, licensing, and provenance requirements.
 
 Build field- and capability-level mappings. Attach a validation method to every mapping.
+
+For evidence-to-product work, keep demonstrated behavior, inferred implementation, production-required completion, speculation, unknowns, and prohibited elements separate. Do not promote popularity, repetition, or an attractive demo into technical truth. Trace every material claim through a capability to executable or observable verification.
 
 ### 4. Select architecture from workload evidence
 
