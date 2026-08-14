@@ -1,8 +1,8 @@
 interface:
   display_name: Compile Gauntlet
-  short_description: Turn vague goals into executable gauntlets
-  default_prompt: Use $compile-gauntlet to convert this vague goal into an evidence-grounded
-    executable Gauntlet Pack.
+  short_description: Reconstruct evidence into executable gauntlets
+  default_prompt: Use $compile-gauntlet to reconstruct this goal or public product evidence
+    into an evidence-grounded executable Gauntlet Pack.
   icon_small: assets/icon.svg
   icon_large: assets/icon.svg
 policy:
