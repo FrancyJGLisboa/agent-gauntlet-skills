@@ -1,0 +1,55 @@
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+
+function failure(code,message,details={}){const e=new Error(message);e.code=code;e.details=details;return e;}
+function git(args,cwd,{allowFailure=false}={}) {
+  const r=spawnSync('git',args,{cwd,encoding:'utf8',timeout:120000,maxBuffer:16*1024*1024});
+  if(!allowFailure&&r.status!==0)throw failure('GIT_OPERATION_FAILED',`git ${args[0]} failed`,{stderr:r.stderr?.trim(),cwd});
+  return r;
+}
+function safe(id){return id.replace(/[^a-zA-Z0-9_.-]/g,'-');}
+export class WorkspaceManager {
+  constructor(validation,store){
+    this.validation=validation;this.store=store;this.repo=path.resolve(validation.root,'..');
+    if(git(['rev-parse','--show-toplevel'],this.repo,{allowFailure:true}).status!==0)throw failure('GIT_REQUIRED','Autonomous execution requires a Git repository');
+    const tracked=git(['status','--porcelain','--untracked-files=no'],this.repo).stdout.trim();
+    if(tracked)throw failure('WORKTREE_DIRTY','Tracked files must be committed before starting the Gauntlet',{files:tracked.split('\n')});
+  }
+  key(id,name){return `workspace_${id}_${name}`;}
+  get(id){const dir=this.store.getMeta(this.key(id,'dir'));return dir?{dir,base:this.store.getMeta(this.key(id,'base')),branch:this.store.getMeta(this.key(id,'branch'))}:null;}
+  ensure(id){
+    const existing=this.get(id);if(existing&&fs.existsSync(existing.dir))return existing;
+    const base=git(['rev-parse','HEAD'],this.repo).stdout.trim(),nonce=crypto.randomBytes(5).toString('hex'),branch=`gauntlet/${safe(id)}/${nonce}`;
+    const dir=path.join(os.tmpdir(),`agent-gauntlet-${safe(id)}-${nonce}`);
+    git(['worktree','add','-b',branch,dir,base],this.repo);
+    this.store.setMeta(this.key(id,'dir'),dir);this.store.setMeta(this.key(id,'base'),base);this.store.setMeta(this.key(id,'branch'),branch);
+    return {dir,base,branch};
+  }
+  changed(workspace){return git(['status','--porcelain'],workspace.dir).stdout.trimEnd().split('\n').filter(Boolean).map(l=>l.slice(3).trim());}
+  assertScope(workspace,spec){
+    const changed=this.changed(workspace),scope=Array.isArray(spec.builder?.scope)?spec.builder.scope:[];
+    if(!scope.length||!changed.length)return changed;
+    const outside=changed.filter(file=>!scope.some(s=>file===s||file.startsWith(`${s.replace(/\/$/,'')}/`)));
+    if(outside.length)throw failure('SCOPE_VIOLATION','Builder changed files outside its declared scope',{outside,scope});
+    return changed;
+  }
+  checkpoint(workspace,spec){
+    const changed=this.assertScope(workspace,spec);if(!changed.length)return null;
+    git(['add','--all'],workspace.dir);git(['-c','user.name=Agent Gauntlet','-c','user.email=gauntlet@local','commit','-m',`gauntlet(${spec.id}): builder checkpoint`],workspace.dir);
+    return git(['rev-parse','HEAD'],workspace.dir).stdout.trim();
+  }
+  assertReadOnly(workspace,before){const after=git(['status','--porcelain'],workspace.dir).stdout;if(after!==before)throw failure('CRITIC_MUTATION','Read-only agent modified the isolated workspace');}
+  snapshot(workspace){return git(['status','--porcelain'],workspace.dir).stdout;}
+  integrate(id){
+    const workspace=this.get(id);if(!workspace)return;
+    const current=git(['rev-parse','HEAD'],this.repo).stdout.trim();
+    if(current!==workspace.base)throw failure('INTEGRATION_BASE_MOVED','Target branch changed while slice was isolated',{expected:workspace.base,observed:current});
+    const commits=git(['rev-list','--reverse',`${workspace.base}..${workspace.branch}`],this.repo).stdout.trim().split('\n').filter(Boolean);
+    for(const commit of commits)git(['cherry-pick',commit],this.repo);
+    this.cleanup(id);
+  }
+  cleanup(id){const w=this.get(id);if(!w)return;if(fs.existsSync(w.dir))git(['worktree','remove','--force',w.dir],this.repo);git(['branch','-D',w.branch],this.repo,{allowFailure:true});for(const n of ['dir','base','branch'])this.store.db.prepare('DELETE FROM meta WHERE key=?').run(this.key(id,n));}
+}
