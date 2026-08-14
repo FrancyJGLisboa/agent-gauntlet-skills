@@ -1,0 +1,4 @@
+clean_room: true
+runs: 2
+tests: [unit-test, clean-install]
+deliverables: [portable-tarball, oci-container]
