@@ -69,6 +69,8 @@ Read [pack-spec.md](references/pack-spec.md) and create every required file. Cop
 
 Make each execution slice independently testable. Specify prerequisites and dependencies, builder scope and prohibited changes, critic isolation and required evidence, deterministic tests and qualitative comparison protocol, maximum three repairs by default, and success/failure/blocked transitions.
 
+Declare every deterministic acceptance command as an argument array, never a shell string. This lets the runtime execute the command without shell interpolation and capture attributable evidence. Include a bounded timeout and only the environment-variable names the test genuinely requires.
+
 Use objective verification wherever possible. For qualitative claims, require randomized blinded pairwise comparisons by at least three independent judges, evidence-backed rationales, and a declared agreement threshold.
 
 If the repository contains `packages/gauntlet-cli/src/cli.js`, run `node packages/gauntlet-cli/src/cli.js validate .gauntlet/manifest.yaml`. Treat every reported error as a compilation defect. Do not mark a pack executable until deterministic validation passes.
