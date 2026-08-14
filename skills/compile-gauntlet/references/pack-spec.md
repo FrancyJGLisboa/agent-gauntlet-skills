@@ -13,6 +13,7 @@ Create all required files under `.gauntlet/`.
 | `target-contracts.yaml` | Per-source schema and semantic contracts |
 | `semantic-mappings.yaml` | Reference-to-target mappings, classification, evidence, validation |
 | `architecture-decisions.yaml` | Workload budgets, component boundaries, candidate stacks, selected technologies, evidence, benchmarks, reconsideration triggers |
+| `distribution-contract.yaml` | Personas, delivery channels, release artifacts, clean-install, upgrade, rollback, integrity and support requirements |
 | `uncertainties.yaml` | Hypotheses, experiments, decision rules, safe defaults, blocked states |
 | `execution-dag.yaml` | Slices, dependencies, builder/critic contracts, transitions |
 | `acceptance-tests.yaml` | Commands, fixtures, assertions, tolerances, expected artifacts |
@@ -21,6 +22,8 @@ Create all required files under `.gauntlet/`.
 | `final-verification.yaml` | Clean-room end-to-end verification and deliverables |
 
 Create an `evidence/` directory only when local evidence artifacts are generated. Reference external evidence by stable URL and retrieval date rather than copying it unnecessarily.
+
+When the Gauntlet CLI is available, its validation result is authoritative for structural, graph, retry, architecture-record, distribution-lifecycle, evidence-attachment, and state-transition invariants. Semantic critics remain responsible for whether the recorded evidence actually supports the decisions.
 
 ## Status values
 
