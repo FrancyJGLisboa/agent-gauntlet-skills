@@ -253,3 +253,16 @@ scripts/
 ## License
 
 MIT
+
+## Invoke once and let the agents finish
+
+After a Gauntlet Pack exists, run:
+
+```bash
+npx @agent-gauntlet/cli run --host auto
+```
+
+The driver auto-detects an authenticated Codex, Claude Code, or GitHub Copilot CLI and owns the complete bounded builder → critic → repair → verifier loop. If the original skill request asks for a delivered product, `compile-gauntlet` automatically continues into `run-gauntlet`; the user does not need a second prompt.
+
+On success, read `.gauntlet/product-passport.md` for a subject-matter explanation of what was built, architectural choices, operational/distribution instructions, proof, and known limitations.
+
