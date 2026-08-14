@@ -6,10 +6,12 @@ Deterministic policy and state engine for compiled Gauntlet Packs. Agents provid
 npm install
 npx gauntlet validate .gauntlet/manifest.yaml
 npx gauntlet init .gauntlet/manifest.yaml
-npx gauntlet next .gauntlet/manifest.yaml
-npx gauntlet transition slice-id building --actor builder
-npx gauntlet transition slice-id critiquing --actor builder
-npx gauntlet transition slice-id passed --actor critic --evidence evidence/test.log
+npx gauntlet next --manifest .gauntlet/manifest.yaml
+npx gauntlet assign slice-id --role builder --manifest .gauntlet/manifest.yaml
+npx gauntlet execute slice-id declared-test --token CAPABILITY --manifest .gauntlet/manifest.yaml
+npx gauntlet transition slice-id building --token CAPABILITY --manifest .gauntlet/manifest.yaml
 ```
 
-The engine writes `.gauntlet/run-state.json` atomically. A builder cannot pass its own slice, pass/verify transitions require hashed evidence artifacts, dependencies must pass before building, repair limits cannot exceed three, and publishing/deployment transitions require explicit authorization.
+The engine stores state transactionally in `.gauntlet/run-state.sqlite`. It fingerprints and freezes the pack, executes declared commands itself, records environment and Git metadata, hashes outputs, and binds capabilities to a role, slice, fingerprint, and expiry. It rejects stale or externally manufactured evidence. A builder cannot pass its own slice, dependencies must pass before building, and repair limits cannot exceed three.
+
+Release authority requires an HMAC produced with `GAUNTLET_AUTHORITY_SECRET`, which must remain outside agent context. The CLI prepares and verifies releases but does not publish automatically.
