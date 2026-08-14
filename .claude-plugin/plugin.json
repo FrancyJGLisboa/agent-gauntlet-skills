@@ -1,0 +1,9 @@
+{
+  "name": "agent-gauntlet",
+  "version": "1.0.0",
+  "description": "Compile vague requests into executable Gauntlet Packs and run evidence-driven builder-critic loops.",
+  "author": {
+    "name": "Francy Lisboa"
+  },
+  "license": "MIT"
+}
