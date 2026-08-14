@@ -1,0 +1,8 @@
+{
+  "name": "coffee-market-terminal-example",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": { "start": "node src/server.js", "test": "node --test", "verify:distribution": "node scripts/verify-distribution.js" },
+  "engines": { "node": ">=20" },
+  "license": "MIT"
+}
