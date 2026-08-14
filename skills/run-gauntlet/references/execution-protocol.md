@@ -10,7 +10,20 @@ Failure transitions:
 - `REPAIRING -> BLOCKED` at retry or stagnation limit
 - any state -> `BLOCKED` when a declared prerequisite cannot be satisfied
 
-Never transition to `PASS` without a conforming critic verdict and all required deterministic checks.
+Never transition to `PASS` without a conforming critic verdict and all required deterministic checks. When the Gauntlet CLI is available, its transition result is authoritative; do not hand-edit state to manufacture a transition.
+
+## CLI enforcement
+
+Use the repository-local CLI:
+
+```bash
+node packages/gauntlet-cli/src/cli.js validate .gauntlet/manifest.yaml
+node packages/gauntlet-cli/src/cli.js init .gauntlet/manifest.yaml
+node packages/gauntlet-cli/src/cli.js next .gauntlet/manifest.yaml
+node packages/gauntlet-cli/src/cli.js transition <slice> <state> --actor <actor> --evidence <artifact>
+```
+
+The engine must reject missing pack files, malformed architecture or distribution records, cyclic or unresolved dependencies, builder-authored passes, evidence-free passes, excessive repair attempts, illegal transitions, and unauthorized publishing or deployment.
 
 ## Required run artifacts
 
