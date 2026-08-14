@@ -89,11 +89,16 @@ Repair the pack until validation passes or a concrete blocker remains. Do not be
 
 Infer continuation from the original request. If the user asked for a working product, production version, adaptation, reconstruction, end-to-end platform, or equivalent delivered outcome, invoke `run-gauntlet` immediately after the pack becomes executable. Do not stop to ask for approval, tell the user to issue a second command, or ask them to judge the pack.
 
-The execution phase must prefer the one-command driver:
+When compilation began inside the current agent and the pack exists, continue with the run driver. For a vague request invoked from the CLI, prefer the code-enforced delivery driver:
 
 ```bash
-node packages/gauntlet-cli/src/cli.js run --host auto --manifest .gauntlet/manifest.yaml
+node packages/gauntlet-cli/src/cli.js deliver \
+  --request-file gauntlet-request.md \
+  --host auto \
+  --manifest .gauntlet/manifest.yaml
 ```
+
+The driver permits at most three compiler validation attempts, refuses an invalid or blocked pack, and then transfers its fingerprint into isolated resumable execution. Add repeated `--source <url>` arguments for reference evidence.
 
 Remain attached through bounded builder, critic, repair, and final-verifier turns. Stop only at `verified` or a compiled authority/access blocker. If the original request asked only for a plan, contract, pack, audit, or explanation, do not execute it.
 
