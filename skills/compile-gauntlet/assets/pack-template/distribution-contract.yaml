@@ -1,0 +1,11 @@
+personas: []
+artifacts: []
+requirements:
+  clean_install: true
+  upgrade: true
+  rollback: true
+  checksums: true
+  signed_artifacts: false
+  sbom: true
+authority:
+  publishing_requires_explicit_authorization: true
