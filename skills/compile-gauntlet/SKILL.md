@@ -43,7 +43,15 @@ For every target source, capture access method, schema, identifiers, units, geog
 
 Build field- and capability-level mappings. Attach a validation method to every mapping.
 
-### 4. Compile uncertainty into experiments
+### 4. Select architecture from workload evidence
+
+Read [stack-selection.md](references/stack-selection.md). Decompose the platform into product surface, control plane, scientific workloads, durable compute kernels, persistence, and deployment. Define latency, throughput, memory, portability, reliability, and maintainability budgets before selecting languages or frameworks.
+
+Do not default an end-to-end platform to Python because it is convenient for the agent. Do not default to Rust, microservices, WASM, queues, caches, or Kubernetes because they appear modern. Prefer a modular monolith and the smallest stack that meets measured requirements.
+
+When uncertainty could materially change the architecture, compile a bounded benchmark or compatibility spike. Require representative inputs and compare runtime performance, resource use, implementation complexity, ecosystem coverage, deployment burden, and failure recovery. Keep Python where scientific or ML ecosystems provide leverage; isolate proven performance-sensitive kernels behind typed contracts and consider Rust, native bindings, or WASM only when the evidence justifies them.
+
+### 5. Compile uncertainty into experiments
 
 For each material uncertainty, define competing hypotheses, evidence to collect, executable experiment, decision rule, confidence threshold, and blocked state. Prefer conservative reversible defaults only when an experiment cannot currently run.
 
@@ -51,11 +59,11 @@ Escalate to the user only for credentials or unavailable private inputs; spendin
 
 When escalation is necessary, emit a decision packet with recommendation, evidence, measured tradeoff, and safe default. Do not ask the user to make an unaided technical judgment.
 
-### 5. Generate competing specifications
+### 6. Generate competing specifications
 
 Have two fresh-context specification agents independently propose execution slices, acceptance evidence, critics, and stop conditions. Have a third fresh-context judge compare them blind where practical. Merge only stronger evidence-backed elements. If agents are unavailable, create two candidates sequentially and adjudicate them against the same evidence ledger.
 
-### 6. Write the Gauntlet Pack
+### 7. Write the Gauntlet Pack
 
 Read [pack-spec.md](references/pack-spec.md) and create every required file. Copy and adapt files from [pack-template](assets/pack-template) rather than inventing a different structure.
 
@@ -63,7 +71,7 @@ Make each execution slice independently testable. Specify prerequisites and depe
 
 Use objective verification wherever possible. For qualitative claims, require randomized blinded pairwise comparisons by at least three independent judges, evidence-backed rationales, and a declared agreement threshold.
 
-### 7. Adversarially validate the pack
+### 8. Adversarially validate the pack
 
 Assign a fresh critic to attempt to invalidate the pack. Require it to find ambiguous goals, circular criteria, unverifiable references, self-judging builders, proxy laundering, semantic gaps, missing provenance, unbounded loops, unsafe actions, and tests that could pass while the intended outcome fails.
 
