@@ -1,0 +1,11 @@
+capabilities:
+  - id: latest-price-view
+    description: Normalize dated coffee prices and present the latest observation.
+    origin: { classification: observed, evidence: [brief-latest-price] }
+    required: true
+    acceptance: [unit-test]
+  - id: cited-price-api
+    description: Return the latest price with source and retrieval provenance.
+    origin: { classification: production-required, evidence: [production-provenance] }
+    required: true
+    acceptance: [unit-test, clean-install]
