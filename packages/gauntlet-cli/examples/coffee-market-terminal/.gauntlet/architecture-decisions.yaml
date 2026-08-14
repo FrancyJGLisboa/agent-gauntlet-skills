@@ -1,0 +1,7 @@
+decisions:
+  - component: reference-platform
+    workload: { maximum_p95_latency_ms: 200, expected_concurrency: 10, memory_budget_mb: 128 }
+    candidates: [node-typescript-surface, rust-service]
+    selected: node-typescript-surface
+    evidence: ["Node built-ins satisfy the bounded workload without a native kernel"]
+    reconsider_when: ["measured p95 exceeds 200ms", "CPU-intensive transformations are introduced"]
