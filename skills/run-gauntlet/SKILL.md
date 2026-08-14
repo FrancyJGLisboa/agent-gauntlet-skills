@@ -11,6 +11,8 @@ Execute the compiled contract. Do not ask the user to judge technical quality or
 
 Locate the manifest specified by the user or `.gauntlet/manifest.yaml`. Read the entire indexed pack before changing implementation files. Read [execution-protocol.md](references/execution-protocol.md).
 
+When `packages/gauntlet-cli/src/cli.js` exists, use it as the authoritative structural and state-transition engine. Run `node packages/gauntlet-cli/src/cli.js validate .gauntlet/manifest.yaml` before implementation. Do not bypass a failed policy check with an agent-authored state file.
+
 If no pack exists, invoke or recommend `compile-gauntlet`; do not improvise a Gauntlet from the current request. If the pack is malformed, repair only internally derivable defects and record them. Return to compilation for material objective or contract gaps.
 
 Respect the manifest's authorization, cost, concurrency, retry, and safety boundaries. Never reinterpret `proxy`, `unavailable`, or `unknown` as `equivalent`.
@@ -19,7 +21,7 @@ Respect the manifest's authorization, cost, concurrency, retry, and safety bound
 
 ### 1. Initialize state
 
-Create `.gauntlet/state.yaml` and `.gauntlet/runs/` if absent. Record pack fingerprint, current slice, attempts, experiments, verdicts, artifacts, blockers, and timestamps. Resume valid prior state instead of restarting completed slices.
+Run `node packages/gauntlet-cli/src/cli.js init .gauntlet/manifest.yaml` to create `.gauntlet/run-state.json`, or resume the existing valid state. Create `.gauntlet/runs/` for detailed attempt artifacts. Never edit `run-state.json` directly when the CLI is available.
 
 Establish a clean baseline by running the reference and target preflight commands. Preserve logs as evidence. A failing baseline is evidence, not permission to rewrite unrelated code.
 
@@ -40,6 +42,8 @@ Follow the execution DAG. For each ready slice:
 5. require a structured `PASS` or `FAIL` verdict with executed evidence and one largest gap;
 6. on `FAIL`, send only verified findings to a fresh builder or cleared builder context;
 7. stop at the pack's retry or stagnation boundary.
+
+Use `gauntlet next` and guarded `gauntlet transition` commands for readiness and state changes. Attach actual evidence files to pass and verification transitions. The CLI's evidence hashes, dependency order, critic-only pass rule, verifier-only completion rule, repair cap, and publishing authority gate are hard invariants.
 
 Parallelize only independent read-only investigations or isolated slices. Never allow concurrent writers in the same workspace. Integrate passing slices in dependency order and rerun affected upstream contracts.
 
