@@ -1,0 +1,15 @@
+isolation:
+  fresh_context: true
+  builder_rationale_hidden: true
+  candidate_labels_randomized: true
+verdict_schema:
+  verdict: PASS_OR_FAIL
+  confidence: 0.0
+  claims_checked: []
+  evidence: []
+  largest_gap: null
+  proof_of_resolution: null
+qualitative_comparison:
+  minimum_independent_judges: 3
+  minimum_agreement: 0.67
+  scoring_prohibited: true
