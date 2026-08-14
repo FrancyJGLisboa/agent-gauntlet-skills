@@ -2,6 +2,20 @@
 
 Deterministic policy and state engine for compiled Gauntlet Packs. Agents provide semantic judgment; the CLI controls structural validity, legal transitions, evidence attachment, repair limits, architecture records, distribution readiness, and authority gates.
 
+## Invoke once
+
+From a repository containing a compiled `.gauntlet/manifest.yaml`:
+
+```bash
+npx @agent-gauntlet/cli run --host auto
+```
+
+`run` detects an authenticated Codex, Claude Code, or GitHub Copilot CLI; launches a fresh process for every builder, critic, and verifier turn; runs declared tests itself; reacts to pass, repair, block, timeout, and invalid-output states; enforces repair and turn limits; resumes completed state; and exits only when every slice is independently verified or a machine-readable terminal error is reached. Use `--host codex`, `--host claude`, or `--host copilot` to pin the runtime.
+
+No capability token is placed in an agent prompt. The orchestrator alone owns evidence capture and state transitions. On success it writes `.gauntlet/product-passport.md` and `.gauntlet/product-passport.json`. Regenerate them with `npx @agent-gauntlet/cli explain`.
+
+The command consumes the user's existing authenticated CLI subscription/session. It does not translate a ChatGPT, Claude, or Copilot subscription into API credentials and never resumes one role's conversation for another role.
+
 ```bash
 npm install
 npx gauntlet validate .gauntlet/manifest.yaml
