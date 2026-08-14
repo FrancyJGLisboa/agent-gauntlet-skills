@@ -1,13 +1,17 @@
 {
   "name": "@agent-gauntlet/cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Deterministic policy and state engine for Agent Gauntlet packs",
   "type": "module",
   "bin": {
     "gauntlet": "./src/cli.js"
   },
+  "files": ["src", "schemas", "README.md"],
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "test:conformance": "node --test test/engine.test.js",
+    "test:reference": "node --test test/reference-example.test.js",
+    "prepublishOnly": "npm test"
   },
   "dependencies": {
     "yaml": "^2.8.1"
