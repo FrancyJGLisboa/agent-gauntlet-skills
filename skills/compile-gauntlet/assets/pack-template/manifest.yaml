@@ -1,0 +1,18 @@
+gauntlet_version: 1
+status: blocked
+objective_id: replace-me
+inputs: {}
+execution:
+  strategy: vertical-slices
+  isolated_workspaces: true
+  maximum_parallel_builders: 3
+  maximum_repairs_per_slice: 3
+human_dependency:
+  expected_technical_judgment: none
+  permitted_escalations:
+    - access
+    - spending_authority
+    - irreversible_action
+    - legal_or_licensing
+    - conflicting_business_values
+files: []
