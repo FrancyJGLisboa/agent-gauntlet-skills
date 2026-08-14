@@ -14,7 +14,7 @@ Produce an executable specification, not advice. Treat the user's wording as noi
 - Resolve technical uncertainty through evidence or experiments. Do not convert it into a broad human question.
 - Prefer behavioral compatibility over architectural imitation.
 - Never label a proxy as equivalent. Classify mappings as `equivalent`, `transformable`, `proxy`, `unavailable`, or `unknown`.
-- Do not implement the target system. Write the Gauntlet Pack under `.gauntlet/` unless the user names another output location.
+- During compilation, do not implement the target system. Write the Gauntlet Pack under `.gauntlet/` unless the user names another output location. If the user's request is to build, deliver, reproduce, adapt, or finish the product—not merely to produce a specification—automatically continue into `run-gauntlet` after the pack validates.
 - Preserve existing user files. If `.gauntlet/` exists, inspect it and update only what compilation requires.
 
 ## Compilation workflow
@@ -83,10 +83,24 @@ If the repository contains `packages/gauntlet-cli/src/cli.js`, run `node package
 
 Assign a fresh critic to attempt to invalidate the pack. Require it to find ambiguous goals, circular criteria, unverifiable references, self-judging builders, proxy laundering, semantic gaps, missing provenance, unbounded loops, unsafe actions, and tests that could pass while the intended outcome fails.
 
-Repair the pack until validation passes or a concrete blocker remains. Do not begin implementation.
+Repair the pack until validation passes or a concrete blocker remains. Do not begin implementation inside the compiler phase.
+
+### 9. Continue automatically when delivery was requested
+
+Infer continuation from the original request. If the user asked for a working product, production version, adaptation, reconstruction, end-to-end platform, or equivalent delivered outcome, invoke `run-gauntlet` immediately after the pack becomes executable. Do not stop to ask for approval, tell the user to issue a second command, or ask them to judge the pack.
+
+The execution phase must prefer the one-command driver:
+
+```bash
+node packages/gauntlet-cli/src/cli.js run --host auto --manifest .gauntlet/manifest.yaml
+```
+
+Remain attached through bounded builder, critic, repair, and final-verifier turns. Stop only at `verified` or a compiled authority/access blocker. If the original request asked only for a plan, contract, pack, audit, or explanation, do not execute it.
 
 ## Completion response
 
-Return the pack location, reconstructed objective, number of execution slices and critical experiments, evidence gaps or authority blockers, and this exact agent instruction: `Use $run-gauntlet to execute .gauntlet/manifest.yaml.`
+For compilation-only requests, return the pack location, reconstructed objective, number of execution slices and critical experiments, evidence gaps or authority blockers, and this exact agent instruction: `Use $run-gauntlet to execute .gauntlet/manifest.yaml.`
+
+For delivery requests, do not return a compilation handoff. After `run-gauntlet` finishes, return its terminal evidence-backed result and Product Passport.
 
 Do not ask the user to approve technical quality. State whether the pack is `executable`, `conditionally_executable`, or `blocked`, with machine-readable reasons in the manifest.
