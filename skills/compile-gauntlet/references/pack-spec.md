@@ -12,6 +12,7 @@ Create all required files under `.gauntlet/`.
 | `reference-contract.yaml` | Inputs, behavior, transformations, outputs, invariants, tests, operations |
 | `target-contracts.yaml` | Per-source schema and semantic contracts |
 | `semantic-mappings.yaml` | Reference-to-target mappings, classification, evidence, validation |
+| `architecture-decisions.yaml` | Workload budgets, component boundaries, candidate stacks, selected technologies, evidence, benchmarks, reconsideration triggers |
 | `uncertainties.yaml` | Hypotheses, experiments, decision rules, safe defaults, blocked states |
 | `execution-dag.yaml` | Slices, dependencies, builder/critic contracts, transitions |
 | `acceptance-tests.yaml` | Commands, fixtures, assertions, tolerances, expected artifacts |
@@ -35,4 +36,4 @@ Do not use cross-agent agreement as evidence of an external fact. Agreement only
 
 ## Quality criteria
 
-A valid pack must be executable without rediscovering requirements, bounded, explicit about proxies, safe under partial failure, testable from actual outputs, independent of unaided human quality judgment, and resumable from recorded state.
+A valid pack must be executable without rediscovering requirements, bounded, explicit about proxies, safe under partial failure, testable from actual outputs, independent of unaided human quality judgment, and resumable from recorded state. Its architecture must trace to workload requirements or executed experiments rather than an agent's preferred language.
