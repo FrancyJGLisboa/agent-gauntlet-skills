@@ -27,6 +27,7 @@ jobs:
       - run: npm test
       - run: npm pack --dry-run
       - run: node scripts/validate-skills.mjs ../../skills
+      - run: node scripts/verify-agent-docs.mjs ../..
   install-smoke:
     runs-on: ubuntu-latest
     steps:
