@@ -1,6 +1,8 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { DatabaseSync } from 'node:sqlite';
 import YAML from 'yaml';
 
 export const REQUIRED_FILES = [
@@ -28,6 +30,18 @@ function asArray(value) { return Array.isArray(value) ? value : []; }
 
 export function readYaml(file) {
   return YAML.parse(fs.readFileSync(file, 'utf8'));
+}
+
+function sha256(data) { return crypto.createHash('sha256').update(data).digest('hex'); }
+
+export function packFingerprint(root) {
+  const hash = crypto.createHash('sha256');
+  for (const name of [...REQUIRED_FILES].sort()) {
+    const file = path.join(root, name);
+    if (!fs.existsSync(file)) throw new Error(`Cannot fingerprint missing file: ${name}`);
+    hash.update(name); hash.update('\0'); hash.update(fs.readFileSync(file)); hash.update('\0');
+  }
+  return hash.digest('hex');
 }
 
 function requireKeys(doc, keys, file, errors) {
@@ -119,7 +133,155 @@ export function validatePack(manifestPath = '.gauntlet/manifest.yaml') {
   if (documents['execution-dag.yaml']) validateDag(documents['execution-dag.yaml'], 'execution-dag.yaml', errors);
   const stop = documents['stop-policy.yaml'];
   if (stop && (stop.retry?.maximum_repairs_per_slice ?? 4) > 3) errors.push(issue('REPAIR_LIMIT', 'Stop policy repair limit cannot exceed 3', 'stop-policy.yaml', 'retry.maximum_repairs_per_slice'));
-  return { valid: errors.length === 0, root, errors, warnings, documents };
+  return { valid: errors.length === 0, root, errors, warnings, documents,
+    fingerprint: errors.some(e => e.code === 'MISSING_FILE' || e.code === 'INVALID_YAML') ? null : packFingerprint(root) };
+}
+
+export class RunStore {
+  constructor(root) {
+    this.root = root;
+    this.file = path.join(root, 'run-state.sqlite');
+    this.db = new DatabaseSync(this.file);
+    this.db.exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;');
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS slices (id TEXT PRIMARY KEY, state TEXT NOT NULL, repairs INTEGER NOT NULL DEFAULT 0);
+      CREATE TABLE IF NOT EXISTS assignments (
+        id TEXT PRIMARY KEY, token_hash TEXT UNIQUE NOT NULL, slice_id TEXT NOT NULL,
+        role TEXT NOT NULL, fingerprint TEXT NOT NULL, created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL, revoked_at TEXT
+      );
+      CREATE TABLE IF NOT EXISTS evidence (
+        id TEXT PRIMARY KEY, assignment_id TEXT NOT NULL, slice_id TEXT NOT NULL,
+        test_id TEXT NOT NULL, fingerprint TEXT NOT NULL, captured_at TEXT NOT NULL,
+        command_json TEXT NOT NULL, cwd TEXT NOT NULL, exit_code INTEGER,
+        signal TEXT, stdout_sha256 TEXT NOT NULL, stderr_sha256 TEXT NOT NULL,
+        artifact_path TEXT NOT NULL, git_commit TEXT, git_dirty INTEGER NOT NULL,
+        FOREIGN KEY(assignment_id) REFERENCES assignments(id)
+      );
+      CREATE TABLE IF NOT EXISTS events (
+        seq INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, slice_id TEXT NOT NULL,
+        from_state TEXT NOT NULL, to_state TEXT NOT NULL, assignment_id TEXT NOT NULL,
+        reason TEXT NOT NULL, evidence_json TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS authorities (
+        capability TEXT NOT NULL, target TEXT NOT NULL, version TEXT NOT NULL,
+        granted_at TEXT NOT NULL, approval_hash TEXT NOT NULL,
+        PRIMARY KEY(capability, target, version)
+      );
+    `);
+  }
+  close() { this.db.close(); }
+  getMeta(key) { return this.db.prepare('SELECT value FROM meta WHERE key=?').get(key)?.value; }
+  setMeta(key, value) { this.db.prepare('INSERT OR REPLACE INTO meta(key,value) VALUES(?,?)').run(key, String(value)); }
+  assertFingerprint(fingerprint) {
+    const stored = this.getMeta('pack_fingerprint');
+    if (!stored) throw new Error('Run is not initialized');
+    if (stored !== fingerprint) throw new Error(`Pack fingerprint changed: expected ${stored}, observed ${fingerprint}; recompile before continuing`);
+  }
+  initialize(validation) {
+    if (!validation.valid) throw new Error('Cannot initialize an invalid pack');
+    if (this.getMeta('pack_fingerprint')) throw new Error('Run already initialized');
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      this.setMeta('pack_fingerprint', validation.fingerprint);
+      this.setMeta('created_at', new Date().toISOString());
+      for (const slice of asArray(validation.documents['execution-dag.yaml']?.slices)) this.db.prepare('INSERT INTO slices(id,state,repairs) VALUES(?,?,0)').run(slice.id, 'pending');
+      this.db.exec('COMMIT');
+    } catch (error) { this.db.exec('ROLLBACK'); throw error; }
+    return this.status();
+  }
+  status() {
+    return { fingerprint: this.getMeta('pack_fingerprint'), slices: this.db.prepare('SELECT id,state,repairs FROM slices ORDER BY id').all(), events: this.db.prepare('SELECT * FROM events ORDER BY seq').all() };
+  }
+  ready(validation) {
+    const states = new Map(this.db.prepare('SELECT id,state FROM slices').all().map(s => [s.id, s.state]));
+    return asArray(validation.documents['execution-dag.yaml']?.slices).filter(s => states.get(s.id) === 'pending' && asArray(s.depends_on).every(d => ['passed','verified'].includes(states.get(d)))).map(s => s.id);
+  }
+  assign({ validation, sliceId, role, ttlSeconds = 3600 }) {
+    this.assertFingerprint(validation.fingerprint);
+    if (!['builder','critic','verifier','engine'].includes(role)) throw new Error(`Invalid role: ${role}`);
+    const slice = this.db.prepare('SELECT id FROM slices WHERE id=?').get(sliceId);
+    if (!slice) throw new Error(`Unknown slice: ${sliceId}`);
+    const id = crypto.randomUUID(), token = `gcap_${crypto.randomBytes(32).toString('base64url')}`;
+    const now = new Date(), expires = new Date(now.getTime() + ttlSeconds * 1000);
+    this.db.prepare('INSERT INTO assignments VALUES(?,?,?,?,?,?,?,NULL)').run(id, sha256(token), sliceId, role, validation.fingerprint, now.toISOString(), expires.toISOString());
+    return { assignment_id:id, token, slice_id:sliceId, role, expires_at:expires.toISOString() };
+  }
+  authenticate(token, sliceId, roles) {
+    if (!token) throw new Error('Assignment capability token is required');
+    const a = this.db.prepare('SELECT * FROM assignments WHERE token_hash=?').get(sha256(token));
+    if (!a || a.revoked_at) throw new Error('Invalid or revoked assignment capability');
+    if (Date.parse(a.expires_at) <= Date.now()) throw new Error('Assignment capability expired');
+    if (a.slice_id !== sliceId) throw new Error('Assignment capability is bound to another slice');
+    if (!roles.includes(a.role)) throw new Error(`Role ${a.role} cannot perform this action`);
+    if (a.fingerprint !== this.getMeta('pack_fingerprint')) throw new Error('Assignment belongs to another pack fingerprint');
+    return a;
+  }
+  recordExecution({ validation, token, sliceId, testId }) {
+    this.assertFingerprint(validation.fingerprint);
+    const assignment = this.authenticate(token, sliceId, ['builder','critic','verifier']);
+    const tests = asArray(validation.documents['acceptance-tests.yaml']?.tests);
+    const spec = tests.find(t => t.id === testId && (!t.slice_id || t.slice_id === sliceId));
+    if (!spec) throw new Error(`Undeclared acceptance test: ${testId}`);
+    if (!Array.isArray(spec.command) || !spec.command.length || spec.command.some(v => typeof v !== 'string')) throw new Error('Test command must be a non-empty argv array; shell strings are prohibited');
+    const cwd = path.resolve(validation.root, spec.cwd ?? '..');
+    const allowedRoot = path.resolve(validation.root, '..');
+    if (cwd !== allowedRoot && !cwd.startsWith(`${allowedRoot}${path.sep}`)) throw new Error('Test cwd escapes the repository root');
+    const started = new Date().toISOString();
+    const result = spawnSync(spec.command[0], spec.command.slice(1), { cwd, encoding:'utf8', timeout: spec.timeout_ms ?? 300000,
+      env: Object.fromEntries((spec.env_allowlist ?? ['PATH','HOME','TMPDIR']).filter(k => process.env[k] !== undefined).map(k => [k, process.env[k]])) });
+    const completed = new Date().toISOString();
+    const stdout = result.stdout ?? '', stderr = result.stderr ?? '';
+    const id = crypto.randomUUID(), evidenceDir = path.join(validation.root, 'runs', sliceId);
+    fs.mkdirSync(evidenceDir, { recursive:true });
+    const artifactPath = path.join(evidenceDir, `${testId}-${id}.json`);
+    let gitCommit = null, gitDirty = true;
+    const rev = spawnSync('git',['rev-parse','HEAD'],{cwd,encoding:'utf8'}); if(rev.status===0) gitCommit=rev.stdout.trim();
+    const dirty = spawnSync('git',['status','--porcelain'],{cwd,encoding:'utf8'}); if(dirty.status===0) gitDirty=dirty.stdout.trim().length>0;
+    const artifact = { evidence_id:id, assignment_id:assignment.id, slice_id:sliceId, test_id:testId,
+      pack_fingerprint:validation.fingerprint, started_at:started, completed_at:completed,
+      command:spec.command, cwd, exit_code:result.status, signal:result.signal, stdout, stderr,
+      stdout_sha256:sha256(stdout), stderr_sha256:sha256(stderr), git_commit:gitCommit, git_dirty:gitDirty,
+      node_version:process.version, platform:process.platform, arch:process.arch };
+    fs.writeFileSync(artifactPath, `${JSON.stringify(artifact,null,2)}\n`, { mode:0o600 });
+    this.db.prepare('INSERT INTO evidence VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(id, assignment.id, sliceId, testId, validation.fingerprint, completed, JSON.stringify(spec.command), cwd, result.status, result.signal, artifact.stdout_sha256, artifact.stderr_sha256, artifactPath, gitCommit, gitDirty?1:0);
+    return artifact;
+  }
+  transition({ validation, token, sliceId, target, evidenceIds = [], reason = '' }) {
+    this.assertFingerprint(validation.fingerprint);
+    const roles = target === 'passed' ? ['critic'] : target === 'verified' ? ['verifier'] : target === 'building' ? ['builder'] : ['builder','critic','verifier','engine'];
+    const assignment = this.authenticate(token, sliceId, roles);
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      const row = this.db.prepare('SELECT * FROM slices WHERE id=?').get(sliceId);
+      if (!row) throw new Error(`Unknown slice: ${sliceId}`);
+      if (!TRANSITIONS[row.state]?.includes(target)) throw new Error(`Illegal transition: ${row.state} -> ${target}`);
+      if (target === 'building' && row.state === 'pending' && !this.ready(validation).includes(sliceId)) throw new Error('Slice dependencies have not passed');
+      if (['passed','verified'].includes(target)) {
+        if (!evidenceIds.length) throw new Error(`${target} requires CLI-captured evidence`);
+        for (const id of evidenceIds) {
+          const e = this.db.prepare('SELECT * FROM evidence WHERE id=? AND slice_id=? AND fingerprint=?').get(id, sliceId, validation.fingerprint);
+          if (!e) throw new Error(`Evidence is missing, stale, or belongs to another slice: ${id}`);
+          if (e.exit_code !== 0) throw new Error(`Failing evidence cannot support ${target}: ${id}`);
+          if (assignment.role === 'critic' && e.assignment_id === assignment.id) throw new Error('Critic verdict must rely on independently captured execution, not its own manufactured evidence');
+        }
+      }
+      let repairs=row.repairs;
+      if(target==='repairing') { repairs++; const limit=validation.documents['stop-policy.yaml']?.retry?.maximum_repairs_per_slice??3; if(repairs>limit) throw new Error(`Repair limit exceeded (${limit})`); }
+      this.db.prepare('UPDATE slices SET state=?,repairs=? WHERE id=?').run(target,repairs,sliceId);
+      this.db.prepare('INSERT INTO events(at,slice_id,from_state,to_state,assignment_id,reason,evidence_json) VALUES(?,?,?,?,?,?,?)').run(new Date().toISOString(),sliceId,row.state,target,assignment.id,reason,JSON.stringify(evidenceIds));
+      this.db.exec('COMMIT');
+      return { slice:sliceId, from:row.state, to:target, role:assignment.role, evidence:evidenceIds };
+    } catch(error) { this.db.exec('ROLLBACK'); throw error; }
+  }
+  authorizeRelease({ target, version, approval, authoritySecret }) {
+    if (!authoritySecret) throw new Error('GAUNTLET_AUTHORITY_SECRET is required and must remain outside agent context');
+    const expected = crypto.createHmac('sha256', authoritySecret).update(`${target}\n${version}`).digest('hex');
+    if (!crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(String(approval)))) throw new Error('Invalid release authority signature');
+    this.db.prepare('INSERT OR REPLACE INTO authorities VALUES(?,?,?,?,?)').run('release',target,version,new Date().toISOString(),sha256(approval));
+    return { capability:'release', target, version };
+  }
 }
 
 export function initialState(validation) {
