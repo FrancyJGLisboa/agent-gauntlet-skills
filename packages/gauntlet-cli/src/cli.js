@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { RunStore, validatePack } from './engine.js';
-import { explainGauntlet, runGauntlet } from './orchestrator.js';
+import fs from 'node:fs';
+import { deliverGauntlet, explainGauntlet, runGauntlet } from './orchestrator.js';
 
 function usage() {
   console.log(`gauntlet <command> [options]
@@ -16,6 +17,8 @@ Commands:
   authorize-release --target <registry> --version <version> --approval <hmac>
   release-check [manifest]
   run [manifest] [--host auto|codex|claude|copilot]
+  deliver --request <goal> [--source <url>] [--host auto|codex|claude|copilot]
+  deliver --request-file <path> [--host auto|codex|claude|copilot]
   explain [manifest]
 
 All state-changing commands accept --manifest <path>. Capability tokens are
@@ -31,6 +34,12 @@ function checked(args) { const v=validatePack(manifest(args)); if(!v.valid){prin
 const [command,...args]=process.argv.slice(2);
 if(!command||['help','--help','-h'].includes(command)){usage();process.exit(0);}
 try {
+  if(command==='deliver') {
+    const requestFile=option(args,'--request-file'); let request=option(args,'--request');
+    if(requestFile) request=fs.readFileSync(requestFile,'utf8');
+    const sources=repeated(args,'--source'); if(sources.length) request+=`\n\nReference sources:\n${sources.join('\n')}`;
+    print(deliverGauntlet({request,manifest:manifest(args),host:option(args,'--host','auto'),maxCompileAttempts:Number(option(args,'--max-compile-attempts','3')),maxTurns:Number(option(args,'--max-turns','100')),timeoutMs:Number(option(args,'--timeout-ms','900000')),onEvent:e=>process.stderr.write(`${JSON.stringify(e)}\n`)})); process.exit(0);
+  }
   if(command==='run') { print(runGauntlet({manifest:manifest(args),host:option(args,'--host','auto'),maxTurns:Number(option(args,'--max-turns','100')),timeoutMs:Number(option(args,'--timeout-ms','900000')),onEvent:e=>process.stderr.write(`${JSON.stringify(e)}\n`)})); process.exit(0); }
   if(command==='explain') { print(explainGauntlet(manifest(args))); process.exit(0); }
   if(command==='validate') { const v=validatePack(manifest(args)); print({valid:v.valid,fingerprint:v.fingerprint,errors:v.errors,warnings:v.warnings}); process.exit(v.valid?0:1); }
