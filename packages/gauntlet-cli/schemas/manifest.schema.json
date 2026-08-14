@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-gauntlet.dev/schemas/manifest.schema.json",
+  "type": "object",
+  "required": ["gauntlet_version", "status", "objective_id", "execution", "human_dependency", "files"],
+  "properties": {
+    "gauntlet_version": { "const": 1 },
+    "status": { "enum": ["executable", "conditionally_executable", "blocked"] },
+    "execution": {
+      "type": "object",
+      "required": ["maximum_repairs_per_slice"],
+      "properties": { "maximum_repairs_per_slice": { "type": "integer", "minimum": 0, "maximum": 3 } }
+    },
+    "files": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+  }
+}
