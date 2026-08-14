@@ -5,19 +5,31 @@ description: Execute an existing agent-ready Gauntlet Pack through bounded build
 
 # Run Gauntlet
 
-Execute the compiled contract. Do not ask the user to judge technical quality or resolve ambiguity that the pack assigns to evidence or experiments.
+Execute the compiled contract to a verified terminal state. Do not ask the user to judge technical quality or resolve ambiguity that the pack assigns to evidence or experiments.
 
 ## Preconditions
 
 Locate the manifest specified by the user or `.gauntlet/manifest.yaml`. Read the entire indexed pack before changing implementation files. Read [execution-protocol.md](references/execution-protocol.md).
 
-When `packages/gauntlet-cli/src/cli.js` exists, use it as the authoritative structural and state-transition engine. Run `node packages/gauntlet-cli/src/cli.js validate .gauntlet/manifest.yaml` before implementation. Do not bypass a failed policy check with an agent-authored state file.
+When `packages/gauntlet-cli/src/cli.js` exists, use it as the authoritative structural, orchestration, and state-transition engine. Do not bypass a failed policy check with an agent-authored state file.
 
 If no pack exists, invoke or recommend `compile-gauntlet`; do not improvise a Gauntlet from the current request. If the pack is malformed, repair only internally derivable defects and record them. Return to compilation for material objective or contract gaps.
 
 Respect the manifest's authorization, cost, concurrency, retry, and safety boundaries. Never reinterpret `proxy`, `unavailable`, or `unknown` as `equivalent`.
 
 ## Execution workflow
+
+### 0. Prefer the one-command driver
+
+Run this once from the target repository and let it reach a terminal state:
+
+```bash
+node packages/gauntlet-cli/src/cli.js run --host auto --manifest .gauntlet/manifest.yaml
+```
+
+If the CLI is installed from the registry, use `npx @agent-gauntlet/cli run --host auto`. Pin `--host codex`, `claude`, or `copilot` only when requested or auto-detection cannot disambiguate.
+
+The driver launches a new non-resumed host process for every builder, critic, and verifier turn; keeps capability tokens outside agent prompts; runs declared commands itself; dispatches repair and blocker states; enforces bounds; and writes the Product Passport. Stay attached until it exits. Use the manual workflow only to diagnose or recover a structured driver failure.
 
 ### 1. Initialize state
 
@@ -43,7 +55,7 @@ Follow the execution DAG. For each ready slice:
 6. on `FAIL`, send only verified findings to a fresh builder or cleared builder context;
 7. stop at the pack's retry or stagnation boundary.
 
-Use `gauntlet next`, `gauntlet assign`, `gauntlet execute`, and guarded `gauntlet transition` commands. Give each agent only its expiring capability token. Do not expose critic or verifier tokens to builders. Pass evidence IDs created by `gauntlet execute`; external files are not verdict evidence. The CLI's pack fingerprint, command capture, evidence hashes, dependency order, role capabilities, repair cap, and release-authority gate are hard invariants.
+Use `gauntlet next`, `gauntlet assign`, `gauntlet execute`, and guarded `gauntlet transition` commands. In manual recovery, keep every expiring capability token in the controlling runtime; never place it in an agent prompt. Pass evidence IDs created by `gauntlet execute`; external files are not verdict evidence. The CLI's pack fingerprint, command capture, evidence hashes, dependency order, role capabilities, repair cap, and release-authority gate are hard invariants.
 
 Parallelize only independent read-only investigations or isolated slices. Never allow concurrent writers in the same workspace. Integrate passing slices in dependency order and rerun affected upstream contracts.
 
@@ -71,6 +83,6 @@ Assign a final fresh-context critic to validate the evidence chain and attempt t
 
 ## Completion response
 
-Report terminal state (`PASSED`, `PARTIAL`, or `BLOCKED`), capabilities proven and evidence locations, executed tests and clean-run count, unresolved limitations without disguising proxies, blocker packets and minimum missing resources, and changed files.
+Report terminal state (`PASSED`, `PARTIAL`, or `BLOCKED`), capabilities proven and evidence locations, executed tests and clean-run count, unresolved limitations without disguising proxies, blocker packets and minimum missing resources, changed files, and the generated `.gauntlet/product-passport.md` location.
 
 Do not claim success from implementation alone. Claim only what the recorded evidence proves.
