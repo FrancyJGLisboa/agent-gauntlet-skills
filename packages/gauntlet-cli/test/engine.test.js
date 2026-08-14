@@ -115,3 +115,31 @@ test('requires an external HMAC secret for release authority', () => {
     assert.equal(store.authorizeRelease({target:'ghcr.io/x/y',version:'1.0.0',approval,authoritySecret:secret}).capability,'release');
   } finally { store.close(); }
 });
+
+function reconstructionPack(changes={}) {
+  const extra=['source-evidence.yaml','product-reconstruction.yaml','experience-contract.yaml','production-readiness.yaml','claim-traceability.yaml'];
+  const manifest=VALID['manifest.yaml'].replace('objective_id: demo\n','objective_id: demo\nreconstruction:\n  mode: mixed_evidence\n').replace(/files:\n([\s\S]*)/,m=>`${m}${extra.map(f=>`  - ${f}\n`).join('')}`);
+  return pack({
+    'manifest.yaml':manifest,
+    'source-evidence.yaml':`claims:\n  - id: demo\n    source: { type: youtube, url: "https://example.test/video", timestamp: "00:30" }\n    observation: User exports a cited report.\n    classification: observed\n    confidence: high\n    falsifier: Export is identified as a mockup.\n  - id: auth\n    source: { type: other, locator: production analysis }\n    observation: Reports require tenant authorization.\n    classification: production-required\n    confidence: high\n    basis: Reports may contain private customer data.\n    falsifier: Product is constrained to single-user local operation.\n`,
+    'product-reconstruction.yaml':`capabilities:\n  - id: export\n    description: Export a cited report.\n    origin: { classification: observed, evidence: [demo] }\n    required: true\n    acceptance: [core-test]\n  - id: tenant-auth\n    description: Authorize access to private reports.\n    origin: { classification: production-required, evidence: [auth] }\n    required: true\n    acceptance: [core-test]\n`,
+    'experience-contract.yaml':`journeys:\n  - id: export-report\n    persona: analyst\n    trigger: completed analysis\n    steps: [open report, export report]\n    success_evidence: [downloaded artifact]\n`,
+    'production-readiness.yaml':`functional: { journeys: true }\nreliability: { recovery: true }\nsecurity: { authorization: true }\noperations: { health: true }\ndistribution: { clean_install: true }\nevidence: { clean_room: true }\n`,
+    'claim-traceability.yaml':`links:\n  - { claim_id: demo, capability_id: export, verification: [core-test] }\n  - { claim_id: auth, capability_id: tenant-auth, verification: [core-test] }\n`,
+    ...changes
+  });
+}
+
+test('validates multimodal evidence-to-production reconstruction packs',()=>{
+  const p=reconstructionPack(); assert.equal(validatePack(p.manifest).valid,true);
+});
+
+test('rejects uncorroborated high-confidence social claims',()=>{
+  const p=reconstructionPack({'source-evidence.yaml':`claims:\n  - id: demo\n    source: { type: x-post, url: "https://example.test/post" }\n    observation: Product supports audited exports.\n    classification: observed\n    confidence: high\n    falsifier: Product documentation contradicts the post.\n`});
+  const codes=validatePack(p.manifest).errors.map(e=>e.code); assert.ok(codes.includes('SOCIAL_CORROBORATION'));
+});
+
+test('rejects required speculative capabilities and untraced material claims',()=>{
+  const p=reconstructionPack({'product-reconstruction.yaml':`capabilities:\n  - id: export\n    description: Predict markets from comments.\n    origin: { classification: speculative, evidence: [demo] }\n    required: true\n    acceptance: [core-test]\n`,'claim-traceability.yaml':'links: []\n'});
+  const codes=validatePack(p.manifest).errors.map(e=>e.code); assert.ok(codes.includes('SPECULATION_REQUIRED')); assert.ok(codes.includes('UNTRACED_MATERIAL_CLAIM'));
+});
