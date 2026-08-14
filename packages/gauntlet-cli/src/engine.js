@@ -275,15 +275,16 @@ export class RunStore {
     if (a.fingerprint !== this.getMeta('pack_fingerprint')) throw new Error('Assignment belongs to another pack fingerprint');
     return a;
   }
-  recordExecution({ validation, token, sliceId, testId }) {
+  recordExecution({ validation, token, sliceId, testId, workspaceRoot }) {
     this.assertFingerprint(validation.fingerprint);
     const assignment = this.authenticate(token, sliceId, ['builder','critic','verifier']);
     const tests = asArray(validation.documents['acceptance-tests.yaml']?.tests);
     const spec = tests.find(t => t.id === testId && (!t.slice_id || t.slice_id === sliceId));
     if (!spec) throw new Error(`Undeclared acceptance test: ${testId}`);
     if (!Array.isArray(spec.command) || !spec.command.length || spec.command.some(v => typeof v !== 'string')) throw new Error('Test command must be a non-empty argv array; shell strings are prohibited');
-    const cwd = path.resolve(validation.root, spec.cwd ?? '..');
-    const allowedRoot = path.resolve(validation.root, '..');
+    const executionRoot=workspaceRoot?path.resolve(workspaceRoot,'.gauntlet'):validation.root;
+    const cwd = path.resolve(executionRoot, spec.cwd ?? '..');
+    const allowedRoot = path.resolve(executionRoot, '..');
     if (cwd !== allowedRoot && !cwd.startsWith(`${allowedRoot}${path.sep}`)) throw new Error('Test cwd escapes the repository root');
     const started = new Date().toISOString();
     const result = spawnSync(spec.command[0], spec.command.slice(1), { cwd, encoding:'utf8', timeout: spec.timeout_ms ?? 300000,
