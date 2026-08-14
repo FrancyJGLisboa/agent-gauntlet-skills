@@ -12,6 +12,7 @@
     "test:conformance": "node --test test/engine.test.js",
     "test:reference": "node --test test/reference-example.test.js",
     "test:skills": "node scripts/validate-skills.mjs ../../skills",
+    "test:agent-docs": "node scripts/verify-agent-docs.mjs ../..",
     "prepublishOnly": "npm test"
   },
   "dependencies": {
