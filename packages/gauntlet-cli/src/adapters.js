@@ -22,27 +22,32 @@ function invoke(command,args,{cwd,timeoutMs=900000}) {
 const RESULT_SCHEMA={type:'object',additionalProperties:false,properties:{verdict:{type:'string',enum:['complete','pass','repair','blocked']},summary:{type:'string'},reason:{type:'string'},largest_gap:{type:'string'},changed_files:{type:'array',items:{type:'string'}}},required:['verdict','summary','reason','largest_gap','changed_files']};
 class CodexAdapter {
   constructor(){this.name='codex';}
-  invoke({prompt,cwd,runtimeDir,timeoutMs}) {
+  invoke({prompt,cwd,runtimeDir,timeoutMs,role}) {
     fs.mkdirSync(runtimeDir,{recursive:true});
     const schema=path.join(runtimeDir,`schema-${Date.now()}-${Math.random().toString(16).slice(2)}.json`);
     const output=path.join(runtimeDir,`result-${Date.now()}-${Math.random().toString(16).slice(2)}.json`);
     fs.writeFileSync(schema,JSON.stringify(RESULT_SCHEMA));
-    try{invoke('codex',['exec','--ephemeral','--sandbox','workspace-write','--output-schema',schema,'-o',output,prompt],{cwd,timeoutMs});return parseJsonText(fs.readFileSync(output,'utf8'));}
+    try{invoke('codex',['exec','--ephemeral','--sandbox',role==='builder'||role==='compiler'?'workspace-write':'read-only','--output-schema',schema,'-o',output,prompt],{cwd,timeoutMs});return parseJsonText(fs.readFileSync(output,'utf8'));}
     finally{fs.rmSync(schema,{force:true});fs.rmSync(output,{force:true});}
   }
 }
 class ClaudeAdapter {
   constructor(){this.name='claude';}
-  invoke({prompt,cwd,timeoutMs}) {
-    const out=invoke('claude',['-p',prompt,'--bare','--allowedTools','Read,Edit,Write,Bash','--permission-mode','acceptEdits','--output-format','json','--json-schema',JSON.stringify(RESULT_SCHEMA)],{cwd,timeoutMs});
+  invoke({prompt,cwd,timeoutMs,role}) {
+    const writable=role==='builder'||role==='compiler';
+    const args=['-p',prompt,'--bare','--allowedTools',writable?'Read,Edit,Write,Bash':'Read'];
+    if(writable) args.push('--permission-mode','acceptEdits');
+    args.push('--output-format','json','--json-schema',JSON.stringify(RESULT_SCHEMA));
+    const out=invoke('claude',args,{cwd,timeoutMs});
     const envelope=parseJsonText(out);return envelope.structured_output??parseJsonText(envelope.result);
   }
 }
 class CopilotAdapter {
   constructor(){this.name='copilot';}
-  invoke({prompt,cwd,timeoutMs}) {
+  invoke({prompt,cwd,timeoutMs,role}) {
     const constrained=`${prompt}\nReturn exactly one JSON object matching this schema, without Markdown:\n${JSON.stringify(RESULT_SCHEMA)}`;
-    return parseJsonText(invoke('copilot',['-p',constrained,'-s','--no-ask-user','--allow-tool=read,write,shell'],{cwd,timeoutMs}));
+    const permissions=role==='builder'||role==='compiler'?'read,write,shell':'read';
+    return parseJsonText(invoke('copilot',['-p',constrained,'-s','--no-ask-user',`--allow-tool=${permissions}`],{cwd,timeoutMs}));
   }
 }
 export function resolveAdapter(host='auto') {
