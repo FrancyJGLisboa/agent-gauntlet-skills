@@ -174,32 +174,30 @@ GitHub's official guide: [Adding agent skills for GitHub Copilot CLI](https://do
 
 ## Deterministic Gauntlet runtime
 
-The skills provide semantic investigation and criticism. The repository-local CLI enforces the invariants that must not depend on agent obedience:
+The skills provide semantic investigation and criticism. The repository-local CLI enforces structural, evidence, identity, state, distribution, and authority invariants:
 
 ```bash
 cd packages/gauntlet-cli
 npm install
-node src/cli.js validate ../../.gauntlet/manifest.yaml
-node src/cli.js init ../../.gauntlet/manifest.yaml
-node src/cli.js next ../../.gauntlet/manifest.yaml
-```
-
-During a run, apply guarded transitions from the repository root:
-
-```bash
-node packages/gauntlet-cli/src/cli.js transition <slice> building --actor builder
-node packages/gauntlet-cli/src/cli.js transition <slice> critiquing --actor builder
-node packages/gauntlet-cli/src/cli.js transition <slice> passed --actor critic --evidence <artifact>
-```
-
-The runtime rejects missing pack files, malformed architecture and distribution records, cyclic dependencies, illegal transitions, builder-authored passes, evidence-free passes, repair limits above three, and unauthorized publishing or deployment. Evidence artifacts are hashed into the atomic run state.
-
-Run the engine tests with:
-
-```bash
-cd packages/gauntlet-cli
+node src/cli.js validate examples/coffee-market-terminal/.gauntlet/manifest.yaml
 npm test
 ```
+
+For a target pack:
+
+```bash
+node packages/gauntlet-cli/src/cli.js init .gauntlet/manifest.yaml
+node packages/gauntlet-cli/src/cli.js next --manifest .gauntlet/manifest.yaml
+node packages/gauntlet-cli/src/cli.js assign <slice> --role builder --manifest .gauntlet/manifest.yaml
+node packages/gauntlet-cli/src/cli.js execute <slice> <test-id> --token <capability> --manifest .gauntlet/manifest.yaml
+node packages/gauntlet-cli/src/cli.js transition <slice> building --token <capability> --manifest .gauntlet/manifest.yaml
+```
+
+The runtime freezes the compiled pack with a SHA-256 fingerprint, executes declared argv commands without shell interpolation, captures stdout/stderr and environment/Git metadata, and stores state transactionally in SQLite. Capability tokens are bound to one role, slice, fingerprint, and expiration. Builders cannot pass their own work; stale, external, failing, or self-manufactured critic evidence is rejected.
+
+Release authorization requires an HMAC produced with `GAUNTLET_AUTHORITY_SECRET`, kept outside agent context. The repository prepares and verifies npm artifacts but does not publish them automatically.
+
+A complete coffee-market-terminal reference pack and distributable example lives under `packages/gauntlet-cli/examples/coffee-market-terminal`. CI runs conformance tests, reference artifact verification, pack validation, and an npm package dry run.
 
 ## Safety and design principles
 
