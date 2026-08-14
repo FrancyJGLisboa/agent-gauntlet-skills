@@ -1,0 +1,19 @@
+{
+  "name": "@agent-gauntlet/cli",
+  "version": "0.1.0",
+  "description": "Deterministic policy and state engine for Agent Gauntlet packs",
+  "type": "module",
+  "bin": {
+    "gauntlet": "./src/cli.js"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "yaml": "^2.8.1"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}
