@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-gauntlet.dev/schemas/distribution-contract.schema.json",
+  "type": "object",
+  "required": ["personas", "artifacts", "requirements"],
+  "properties": {
+    "personas": { "type": ["array", "object"], "minItems": 1 },
+    "artifacts": { "type": "array", "minItems": 1 },
+    "requirements": {
+      "type": "object",
+      "required": ["clean_install", "upgrade", "rollback", "checksums"],
+      "properties": {
+        "clean_install": { "const": true },
+        "upgrade": { "const": true },
+        "rollback": { "const": true },
+        "checksums": { "const": true }
+      }
+    }
+  }
+}
