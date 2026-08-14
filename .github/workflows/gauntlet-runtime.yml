@@ -1,0 +1,24 @@
+name: gauntlet-runtime
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/gauntlet-cli
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: packages/gauntlet-cli/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm pack --dry-run
+      - run: node src/cli.js validate examples/coffee-market-terminal/.gauntlet/manifest.yaml
