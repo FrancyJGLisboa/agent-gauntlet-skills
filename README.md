@@ -15,14 +15,21 @@ vague request -> compile-gauntlet -> .gauntlet/ pack -> run-gauntlet -> verified
 
 ### Codex TUI
 
-Run these directly in a Codex session:
+Like Ponytail, the repository is a Codex plugin bundle. Register its marketplace from your terminal:
+
+```bash
+codex plugin marketplace add FrancyJGLisboa/agent-gauntlet-skills
+codex
+```
+
+Inside Codex, open `/plugins`, select the **Agent Gauntlet** marketplace, and install **Agent Gauntlet**. Then start a new thread and open `/skills` to verify both skills.
+
+To install only the individual skills instead, run these directly in a Codex session:
 
 ```text
 $skill-installer https://github.com/FrancyJGLisboa/agent-gauntlet-skills/tree/main/skills/compile-gauntlet
 $skill-installer https://github.com/FrancyJGLisboa/agent-gauntlet-skills/tree/main/skills/run-gauntlet
 ```
-
-Then open `/skills` to verify both skills.
 
 ### Claude Code TUI
 
@@ -102,7 +109,9 @@ Use `-Platform codex`, `claude`, or `copilot` for one tool. Use `-Project C:\pat
 
 ### Codex
 
-Codex reads personal skills from `~/.agents/skills` and project skills from `.agents/skills`. You can also ask Codex's skill installer to install each GitHub skill directory:
+For the Ponytail-style plugin installation, use `codex plugin marketplace add FrancyJGLisboa/agent-gauntlet-skills`, then install **Agent Gauntlet** from `/plugins`.
+
+Codex also reads personal skills from `~/.agents/skills` and project skills from `.agents/skills`. To install only the skill payloads, ask Codex's skill installer to install each GitHub skill directory:
 
 ```text
 $skill-installer https://github.com/FrancyJGLisboa/agent-gauntlet-skills/tree/main/skills/compile-gauntlet
