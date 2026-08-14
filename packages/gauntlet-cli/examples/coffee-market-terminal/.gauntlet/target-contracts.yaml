@@ -1,0 +1,7 @@
+sources:
+  - id: example-fixture
+    access: local_csv
+    schema: [date, market, price_brl_per_bag]
+    units: BRL per 60kg bag
+    revision_policy: immutable_fixture
+    provenance_required: true
