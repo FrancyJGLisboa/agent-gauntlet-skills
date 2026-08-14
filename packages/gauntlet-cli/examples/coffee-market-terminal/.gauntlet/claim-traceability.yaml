@@ -1,0 +1,7 @@
+links:
+  - claim_id: brief-latest-price
+    capability_id: latest-price-view
+    verification: [unit-test]
+  - claim_id: production-provenance
+    capability_id: cited-price-api
+    verification: [unit-test, clean-install]
