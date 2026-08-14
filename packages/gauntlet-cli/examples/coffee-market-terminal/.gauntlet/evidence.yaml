@@ -1,0 +1,6 @@
+claims:
+  - id: runtime
+    claim: Node 20 provides the required built-in HTTP and test facilities.
+    source: package.json engines constraint
+    confidence: high
+    falsifier: clean installation or test failure
