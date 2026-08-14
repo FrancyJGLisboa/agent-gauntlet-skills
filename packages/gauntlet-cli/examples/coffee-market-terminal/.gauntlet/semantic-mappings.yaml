@@ -1,0 +1,6 @@
+mappings:
+  - source: price_brl_per_bag
+    target: latest-price API value
+    classification: equivalent
+    evidence: direct numeric parsing without unit conversion
+    validation: unit-test
