@@ -1,0 +1,14 @@
+personas:
+  - { name: analyst, channel: hosted_web, maximum_setup_minutes: 0 }
+  - { name: developer, channel: tarball_or_container, maximum_setup_minutes: 5 }
+artifacts:
+  - { name: portable-package, format: tar-gzip }
+  - { name: web-service, format: oci-container }
+requirements:
+  clean_install: true
+  upgrade: true
+  rollback: true
+  checksums: true
+  signed_artifacts: false
+  sbom: true
+authority: { publishing_requires_explicit_authorization: true }
