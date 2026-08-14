@@ -172,6 +172,35 @@ GitHub's official guide: [Adding agent skills for GitHub Copilot CLI](https://do
 | Claude Code | `~/.claude/skills` | `.claude/skills` |
 | Copilot CLI | `~/.agents/skills` or `~/.copilot/skills` | `.agents/skills`, `.github/skills`, or `.claude/skills` |
 
+## Deterministic Gauntlet runtime
+
+The skills provide semantic investigation and criticism. The repository-local CLI enforces the invariants that must not depend on agent obedience:
+
+```bash
+cd packages/gauntlet-cli
+npm install
+node src/cli.js validate ../../.gauntlet/manifest.yaml
+node src/cli.js init ../../.gauntlet/manifest.yaml
+node src/cli.js next ../../.gauntlet/manifest.yaml
+```
+
+During a run, apply guarded transitions from the repository root:
+
+```bash
+node packages/gauntlet-cli/src/cli.js transition <slice> building --actor builder
+node packages/gauntlet-cli/src/cli.js transition <slice> critiquing --actor builder
+node packages/gauntlet-cli/src/cli.js transition <slice> passed --actor critic --evidence <artifact>
+```
+
+The runtime rejects missing pack files, malformed architecture and distribution records, cyclic dependencies, illegal transitions, builder-authored passes, evidence-free passes, repair limits above three, and unauthorized publishing or deployment. Evidence artifacts are hashed into the atomic run state.
+
+Run the engine tests with:
+
+```bash
+cd packages/gauntlet-cli
+npm test
+```
+
 ## Safety and design principles
 
 - Treat human requests as noisy evidence, not complete specifications.
@@ -197,6 +226,11 @@ skills/
     ├── SKILL.md
     ├── agents/openai.yaml
     └── references/execution-protocol.md
+packages/
+└── gauntlet-cli/
+    ├── src/
+    ├── schemas/
+    └── test/
 scripts/
 ├── install.sh
 └── install.ps1
