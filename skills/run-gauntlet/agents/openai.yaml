@@ -1,0 +1,12 @@
+interface:
+  display_name: Run Gauntlet
+  short_description: Execute evidence-driven builder-critic loops
+  default_prompt: Use $run-gauntlet to execute the available Gauntlet Pack and verify
+    completion from evidence.
+policy:
+  products:
+  - chatgpt
+  - codex
+  - api
+  - atlas
+  allow_implicit_invocation: true
