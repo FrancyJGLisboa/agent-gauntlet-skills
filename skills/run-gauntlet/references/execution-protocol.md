@@ -19,11 +19,13 @@ Use the repository-local CLI:
 ```bash
 node packages/gauntlet-cli/src/cli.js validate .gauntlet/manifest.yaml
 node packages/gauntlet-cli/src/cli.js init .gauntlet/manifest.yaml
-node packages/gauntlet-cli/src/cli.js next .gauntlet/manifest.yaml
-node packages/gauntlet-cli/src/cli.js transition <slice> <state> --actor <actor> --evidence <artifact>
+node packages/gauntlet-cli/src/cli.js next --manifest .gauntlet/manifest.yaml
+node packages/gauntlet-cli/src/cli.js assign <slice> --role builder --manifest .gauntlet/manifest.yaml
+node packages/gauntlet-cli/src/cli.js execute <slice> <test-id> --token <capability> --manifest .gauntlet/manifest.yaml
+node packages/gauntlet-cli/src/cli.js transition <slice> <state> --token <capability> --evidence <evidence-id> --manifest .gauntlet/manifest.yaml
 ```
 
-The engine must reject missing pack files, malformed architecture or distribution records, cyclic or unresolved dependencies, builder-authored passes, evidence-free passes, excessive repair attempts, illegal transitions, and unauthorized publishing or deployment.
+The engine must reject missing pack files, pack mutation after initialization, malformed architecture or distribution records, cyclic or unresolved dependencies, expired or wrong-role capabilities, builder-authored passes, external or stale evidence, excessive repair attempts, illegal transitions, and release authority not signed by the external authority secret.
 
 ## Required run artifacts
 
