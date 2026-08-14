@@ -12,6 +12,11 @@ export const REQUIRED_FILES = [
   'acceptance-tests.yaml', 'critic-protocol.yaml', 'stop-policy.yaml',
   'final-verification.yaml'
 ];
+export const RECONSTRUCTION_FILES = [
+  'source-evidence.yaml', 'product-reconstruction.yaml', 'experience-contract.yaml',
+  'production-readiness.yaml', 'claim-traceability.yaml'
+];
+const RECONSTRUCTION_MODES = new Set(['youtube_demonstration','blog_description','social_discussion','screenshots','live_product','research_paper','mixed_evidence']);
 
 export const STATES = ['pending', 'building', 'critiquing', 'repairing', 'passed', 'failed', 'blocked', 'final_verification', 'verified'];
 const TRANSITIONS = {
@@ -34,14 +39,57 @@ export function readYaml(file) {
 
 function sha256(data) { return crypto.createHash('sha256').update(data).digest('hex'); }
 
-export function packFingerprint(root) {
+export function packFingerprint(root, files = REQUIRED_FILES) {
   const hash = crypto.createHash('sha256');
-  for (const name of [...REQUIRED_FILES].sort()) {
+  for (const name of [...files].sort()) {
     const file = path.join(root, name);
     if (!fs.existsSync(file)) throw new Error(`Cannot fingerprint missing file: ${name}`);
     hash.update(name); hash.update('\0'); hash.update(fs.readFileSync(file)); hash.update('\0');
   }
   return hash.digest('hex');
+}
+
+function validateReconstruction(documents, errors) {
+  const evidence=documents['source-evidence.yaml'];
+  const claims=asArray(evidence?.claims); const claimIds=new Set();
+  if(!claims.length) errors.push(issue('SOURCE_EVIDENCE_EMPTY','Reconstruction requires at least one source claim','source-evidence.yaml','claims'));
+  const classifications=new Set(['observed','corroborated','inferred','production-required','speculative','unknown','prohibited']);
+  const sourceTypes=new Set(['youtube','blog','x-post','social-comment','screenshot','live-product','repository','research-paper','other']);
+  for(const [i,c] of claims.entries()) {
+    const p=`claims[${i}]`; requireKeys(c,['id','source','observation','classification','confidence','falsifier'],'source-evidence.yaml',errors);
+    if(claimIds.has(c.id)) errors.push(issue('DUPLICATE_CLAIM',`Duplicate claim id: ${c.id}`,'source-evidence.yaml',`${p}.id`)); claimIds.add(c.id);
+    if(!sourceTypes.has(c.source?.type)) errors.push(issue('SOURCE_TYPE','Unsupported source type','source-evidence.yaml',`${p}.source.type`));
+    if(!classifications.has(c.classification)) errors.push(issue('CLAIM_CLASS','Unsupported claim classification','source-evidence.yaml',`${p}.classification`));
+    if(['x-post','social-comment'].includes(c.source?.type)&&c.confidence==='high'&&!asArray(c.corroborated_by).length) errors.push(issue('SOCIAL_CORROBORATION','High-confidence social claims require independent corroboration','source-evidence.yaml',`${p}.corroborated_by`));
+    if(['inferred','production-required'].includes(c.classification)&&!c.basis) errors.push(issue('CLAIM_BASIS',`${c.classification} claims require a basis`,'source-evidence.yaml',`${p}.basis`));
+  }
+  for(const c of claims) for(const id of asArray(c.corroborated_by)) if(!claimIds.has(id)) errors.push(issue('UNKNOWN_CORROBORATION',`Unknown corroborating claim: ${id}`,'source-evidence.yaml',c.id));
+
+  const reconstruction=documents['product-reconstruction.yaml']; const capabilities=asArray(reconstruction?.capabilities); const capabilityIds=new Set();
+  if(!capabilities.length) errors.push(issue('RECONSTRUCTION_EMPTY','At least one reconstructed capability is required','product-reconstruction.yaml','capabilities'));
+  for(const [i,c] of capabilities.entries()) {
+    const p=`capabilities[${i}]`; requireKeys(c,['id','description','origin','acceptance'],'product-reconstruction.yaml',errors); capabilityIds.add(c.id);
+    for(const id of asArray(c.origin?.evidence)) if(!claimIds.has(id)) errors.push(issue('UNKNOWN_CLAIM',`Capability references unknown claim: ${id}`,'product-reconstruction.yaml',`${p}.origin.evidence`));
+    if(c.origin?.classification==='speculative'&&c.required!==false) errors.push(issue('SPECULATION_REQUIRED','Speculative capabilities must be explicitly optional','product-reconstruction.yaml',p));
+    if(c.origin?.classification==='prohibited') errors.push(issue('PROHIBITED_CAPABILITY','Prohibited evidence cannot become a capability','product-reconstruction.yaml',p));
+    if(!asArray(c.acceptance).length) errors.push(issue('CAPABILITY_ACCEPTANCE','Capability requires executable or observable acceptance criteria','product-reconstruction.yaml',`${p}.acceptance`));
+  }
+
+  const experience=documents['experience-contract.yaml']; const journeys=asArray(experience?.journeys);
+  if(!journeys.length) errors.push(issue('EXPERIENCE_EMPTY','At least one critical user journey is required','experience-contract.yaml','journeys'));
+  for(const [i,j] of journeys.entries()) { requireKeys(j,['id','persona','trigger','steps','success_evidence'],'experience-contract.yaml',errors); if(!asArray(j.steps).length) errors.push(issue('JOURNEY_STEPS','Journey requires observable steps','experience-contract.yaml',`journeys[${i}].steps`)); }
+
+  const readiness=documents['production-readiness.yaml'];
+  for(const section of ['functional','reliability','security','operations','distribution','evidence']) if(!isObject(readiness?.[section])||!Object.keys(readiness[section]).length) errors.push(issue('READINESS_SECTION',`Missing or empty production-readiness section: ${section}`,'production-readiness.yaml',section));
+
+  const trace=asArray(documents['claim-traceability.yaml']?.links); const linkedClaims=new Set();
+  for(const [i,l] of trace.entries()) {
+    requireKeys(l,['claim_id','capability_id','verification'],'claim-traceability.yaml',errors); linkedClaims.add(l.claim_id);
+    if(!claimIds.has(l.claim_id)) errors.push(issue('TRACE_UNKNOWN_CLAIM',`Trace references unknown claim: ${l.claim_id}`,'claim-traceability.yaml',`links[${i}].claim_id`));
+    if(!capabilityIds.has(l.capability_id)) errors.push(issue('TRACE_UNKNOWN_CAPABILITY',`Trace references unknown capability: ${l.capability_id}`,'claim-traceability.yaml',`links[${i}].capability_id`));
+    if(!asArray(l.verification).length) errors.push(issue('TRACE_VERIFICATION','Trace link requires verification','claim-traceability.yaml',`links[${i}].verification`));
+  }
+  for(const c of claims.filter(c=>['observed','corroborated','production-required'].includes(c.classification))) if(!linkedClaims.has(c.id)) errors.push(issue('UNTRACED_MATERIAL_CLAIM',`Material claim is not traced to a capability: ${c.id}`,'claim-traceability.yaml','links'));
 }
 
 function requireKeys(doc, keys, file, errors) {
@@ -120,21 +168,30 @@ export function validatePack(manifestPath = '.gauntlet/manifest.yaml') {
     catch (error) { errors.push(issue('INVALID_YAML', error.message, name)); }
   }
   const manifest = documents['manifest.yaml'];
+  const reconstructionMode=manifest?.reconstruction?.mode;
+  const reconstructionEnabled=RECONSTRUCTION_MODES.has(reconstructionMode);
+  const requiredFiles=reconstructionEnabled?[...REQUIRED_FILES,...RECONSTRUCTION_FILES]:[...REQUIRED_FILES];
+  if(reconstructionEnabled) for(const name of RECONSTRUCTION_FILES) {
+    const file=path.join(root,name);
+    if(!fs.existsSync(file)){errors.push(issue('MISSING_RECONSTRUCTION_FILE',`Missing reconstruction file: ${name}`,name));continue;}
+    try{documents[name]=readYaml(file);}catch(error){errors.push(issue('INVALID_YAML',error.message,name));}
+  }
   if (manifest) {
     requireKeys(manifest, ['gauntlet_version', 'status', 'objective_id', 'execution', 'human_dependency', 'files'], 'manifest.yaml', errors);
     if (!['executable', 'conditionally_executable', 'blocked'].includes(manifest.status)) errors.push(issue('MANIFEST_STATUS', 'Invalid manifest status', 'manifest.yaml', 'status'));
     if ((manifest.execution?.maximum_repairs_per_slice ?? 4) > 3) errors.push(issue('REPAIR_LIMIT', 'maximum_repairs_per_slice cannot exceed 3', 'manifest.yaml', 'execution.maximum_repairs_per_slice'));
     const declared = new Set(asArray(manifest.files).map(v => typeof v === 'string' ? v : v?.path));
-    for (const name of REQUIRED_FILES) if (!declared.has(name)) errors.push(issue('FILE_INDEX', `Manifest file index does not declare ${name}`, 'manifest.yaml', 'files'));
+    for (const name of requiredFiles) if (!declared.has(name)) errors.push(issue('FILE_INDEX', `Manifest file index does not declare ${name}`, 'manifest.yaml', 'files'));
   }
   if (documents['architecture-decisions.yaml']) validateArchitecture(documents['architecture-decisions.yaml'], 'architecture-decisions.yaml', errors);
   if (documents['distribution-contract.yaml']) validateDistribution(documents['distribution-contract.yaml'], 'distribution-contract.yaml', errors);
   if (documents['semantic-mappings.yaml']) validateMappings(documents['semantic-mappings.yaml'], 'semantic-mappings.yaml', errors);
   if (documents['execution-dag.yaml']) validateDag(documents['execution-dag.yaml'], 'execution-dag.yaml', errors);
+  if(reconstructionEnabled) validateReconstruction(documents,errors);
   const stop = documents['stop-policy.yaml'];
   if (stop && (stop.retry?.maximum_repairs_per_slice ?? 4) > 3) errors.push(issue('REPAIR_LIMIT', 'Stop policy repair limit cannot exceed 3', 'stop-policy.yaml', 'retry.maximum_repairs_per_slice'));
-  return { valid: errors.length === 0, root, errors, warnings, documents,
-    fingerprint: errors.some(e => e.code === 'MISSING_FILE' || e.code === 'INVALID_YAML') ? null : packFingerprint(root) };
+  return { valid: errors.length === 0, root, errors, warnings, documents, requiredFiles,
+    fingerprint: errors.some(e => ['MISSING_FILE','MISSING_RECONSTRUCTION_FILE','INVALID_YAML'].includes(e.code)) ? null : packFingerprint(root,requiredFiles) };
 }
 
 export class RunStore {
