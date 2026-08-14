@@ -1,0 +1,11 @@
+slices:
+  - id: core
+    depends_on: []
+    builder: { scope: [src/market.js, data/coffee-prices.csv] }
+    critic: { independent: true }
+    acceptance_tests: [unit-test]
+  - id: distribution
+    depends_on: [core]
+    builder: { scope: [package.json, Dockerfile, scripts/verify-distribution.js] }
+    critic: { independent: true }
+    acceptance_tests: [clean-install]
