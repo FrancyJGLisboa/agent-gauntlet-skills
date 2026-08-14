@@ -25,6 +25,8 @@ Create an `evidence/` directory only when local evidence artifacts are generated
 
 When the Gauntlet CLI is available, its validation result is authoritative for structural, graph, retry, architecture-record, distribution-lifecycle, evidence-attachment, and state-transition invariants. Semantic critics remain responsible for whether the recorded evidence actually supports the decisions.
 
+Acceptance tests must use `command` as an argv array, with optional `cwd`, `timeout_ms`, and `env_allowlist`. The runtime fingerprints every required pack file at initialization; changing any compiled contract invalidates assignments and evidence until the pack is deliberately recompiled.
+
 ## Status values
 
 - `executable`: all prerequisites needed to start are available.
