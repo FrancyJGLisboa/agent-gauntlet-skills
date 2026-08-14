@@ -1,0 +1,3 @@
+outcome: Deliver a minimal provenance-aware coffee price terminal as an API, web page, npm artifact, and container.
+non_goals: [live commercial data, authentication, trading advice]
+success_evidence: [unit-test, clean-install]
