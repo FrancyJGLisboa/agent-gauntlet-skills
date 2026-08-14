@@ -172,6 +172,22 @@ GitHub's official guide: [Adding agent skills for GitHub Copilot CLI](https://do
 | Claude Code | `~/.claude/skills` | `.claude/skills` |
 | Copilot CLI | `~/.agents/skills` or `~/.copilot/skills` | `.agents/skills`, `.github/skills`, or `.claude/skills` |
 
+## Evidence-to-production reconstruction
+
+`compile-gauntlet` can reconstruct an independent production-grade product from fragmented public evidence: YouTube demonstrations, blog posts, X discussions and comments, screenshots, live-product behavior, research papers, repositories, or a mixture.
+
+It preserves claim-level locators, separates observed behavior from inference and production-required completion, traces material claims into capabilities and verification, and refuses to make speculation required scope. High-confidence social claims require independent corroboration. Protected branding, private code, access-control bypass, and unlicensed content are explicitly outside the reconstruction contract.
+
+A reconstruction pack adds:
+
+```text
+source-evidence.yaml
+product-reconstruction.yaml
+experience-contract.yaml
+production-readiness.yaml
+claim-traceability.yaml
+```
+
 ## Deterministic Gauntlet runtime
 
 The skills provide semantic investigation and criticism. The repository-local CLI enforces structural, evidence, identity, state, distribution, and authority invariants:
