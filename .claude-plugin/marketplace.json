@@ -1,0 +1,15 @@
+{
+  "name": "agent-gauntlet-skills",
+  "owner": {
+    "name": "Francy Lisboa"
+  },
+  "plugins": [
+    {
+      "name": "agent-gauntlet",
+      "source": ".",
+      "displayName": "Agent Gauntlet",
+      "description": "Compile vague requests into executable Gauntlet Packs and run evidence-driven builder-critic loops.",
+      "version": "1.0.0"
+    }
+  ]
+}
