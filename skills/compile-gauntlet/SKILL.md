@@ -71,6 +71,8 @@ Make each execution slice independently testable. Specify prerequisites and depe
 
 Use objective verification wherever possible. For qualitative claims, require randomized blinded pairwise comparisons by at least three independent judges, evidence-backed rationales, and a declared agreement threshold.
 
+If the repository contains `packages/gauntlet-cli/src/cli.js`, run `node packages/gauntlet-cli/src/cli.js validate .gauntlet/manifest.yaml`. Treat every reported error as a compilation defect. Do not mark a pack executable until deterministic validation passes.
+
 ### 8. Adversarially validate the pack
 
 Assign a fresh critic to attempt to invalidate the pack. Require it to find ambiguous goals, circular criteria, unverifiable references, self-judging builders, proxy laundering, semantic gaps, missing provenance, unbounded loops, unsafe actions, and tests that could pass while the intended outcome fails.
