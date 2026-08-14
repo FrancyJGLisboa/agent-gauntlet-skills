@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { RunStore, validatePack } from './engine.js';
+import { explainGauntlet, runGauntlet } from './orchestrator.js';
 
 function usage() {
   console.log(`gauntlet <command> [options]
@@ -14,6 +15,8 @@ Commands:
   transition <slice> <state> --token <capability> [--evidence <id>]
   authorize-release --target <registry> --version <version> --approval <hmac>
   release-check [manifest]
+  run [manifest] [--host auto|codex|claude|copilot]
+  explain [manifest]
 
 All state-changing commands accept --manifest <path>. Capability tokens are
 bound to one role, slice, pack fingerprint, and expiration time.`);
@@ -28,6 +31,8 @@ function checked(args) { const v=validatePack(manifest(args)); if(!v.valid){prin
 const [command,...args]=process.argv.slice(2);
 if(!command||['help','--help','-h'].includes(command)){usage();process.exit(0);}
 try {
+  if(command==='run') { print(runGauntlet({manifest:manifest(args),host:option(args,'--host','auto'),maxTurns:Number(option(args,'--max-turns','100')),timeoutMs:Number(option(args,'--timeout-ms','900000')),onEvent:e=>process.stderr.write(`${JSON.stringify(e)}\n`)})); process.exit(0); }
+  if(command==='explain') { print(explainGauntlet(manifest(args))); process.exit(0); }
   if(command==='validate') { const v=validatePack(manifest(args)); print({valid:v.valid,fingerprint:v.fingerprint,errors:v.errors,warnings:v.warnings}); process.exit(v.valid?0:1); }
   const v=checked(args); const store=new RunStore(v.root);
   try {
@@ -44,4 +49,4 @@ try {
       print({ready,artifacts:d.artifacts,fingerprint:v.fingerprint}); process.exit(ready?0:1);
     } else { usage(); process.exit(2); }
   } finally { store.close(); }
-} catch(error) { console.error(JSON.stringify({error:error.message},null,2)); process.exit(1); }
+} catch(error) { console.error(JSON.stringify({error:{code:error.code??'GAUNTLET_ERROR',message:error.message,details:error.details??{}}},null,2)); process.exit(1); }
