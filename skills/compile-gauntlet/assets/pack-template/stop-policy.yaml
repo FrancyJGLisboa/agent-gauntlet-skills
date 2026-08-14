@@ -1,0 +1,17 @@
+success:
+  required_contracts_satisfied: true
+  deterministic_tests_pass: true
+  unresolved_critical_uncertainties: 0
+  clean_verification_runs: 2
+retry:
+  maximum_repairs_per_slice: 3
+  repeated_identical_failure: 2
+  no_new_evidence_rounds: 2
+on_stagnation: BLOCKED
+on_failure:
+  produce_blocker_packet: true
+  include:
+    - failing_evidence
+    - attempted_repairs
+    - competing_hypotheses
+    - minimum_missing_resource
