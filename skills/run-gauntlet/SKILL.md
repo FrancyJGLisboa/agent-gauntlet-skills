@@ -29,7 +29,7 @@ node packages/gauntlet-cli/src/cli.js run --host auto --manifest .gauntlet/manif
 
 If the CLI is installed from the registry, use `npx @agent-gauntlet/cli run --host auto`. Pin `--host codex`, `claude`, or `copilot` only when requested or auto-detection cannot disambiguate.
 
-The driver launches a new non-resumed host process for every builder, critic, and verifier turn; keeps capability tokens outside agent prompts; runs declared commands itself; dispatches repair and blocker states; enforces bounds; and writes the Product Passport. Stay attached until it exits. Use the manual workflow only to diagnose or recover a structured driver failure.
+The driver launches a new non-resumed host process for every builder, critic, and verifier turn; keeps capability tokens outside agent prompts; runs declared commands itself; dispatches repair and blocker states; enforces bounds; and writes the Product Passport. Stay attached until it exits. Use the manual workflow only to diagnose or recover a structured driver failure.\n\nRequire a clean Git repository. The driver creates a persistent isolated worktree and branch per slice, rejects changes outside `builder.scope`, gives critics and verifiers read-only permissions, and integrates only after final verification. Rerun the same command after interruption to resume the persisted building worktree.
 
 ### 1. Initialize state
 
