@@ -21,7 +21,7 @@ Respect the manifest's authorization, cost, concurrency, retry, and safety bound
 
 ### 1. Initialize state
 
-Run `node packages/gauntlet-cli/src/cli.js init .gauntlet/manifest.yaml` to create `.gauntlet/run-state.json`, or resume the existing valid state. Create `.gauntlet/runs/` for detailed attempt artifacts. Never edit `run-state.json` directly when the CLI is available.
+Run `node packages/gauntlet-cli/src/cli.js init .gauntlet/manifest.yaml` to create transactional `.gauntlet/run-state.sqlite`, or resume the existing valid state. The runtime creates `.gauntlet/runs/` for captured evidence. Never edit the database or evidence records directly.
 
 Establish a clean baseline by running the reference and target preflight commands. Preserve logs as evidence. A failing baseline is evidence, not permission to rewrite unrelated code.
 
@@ -43,7 +43,7 @@ Follow the execution DAG. For each ready slice:
 6. on `FAIL`, send only verified findings to a fresh builder or cleared builder context;
 7. stop at the pack's retry or stagnation boundary.
 
-Use `gauntlet next` and guarded `gauntlet transition` commands for readiness and state changes. Attach actual evidence files to pass and verification transitions. The CLI's evidence hashes, dependency order, critic-only pass rule, verifier-only completion rule, repair cap, and publishing authority gate are hard invariants.
+Use `gauntlet next`, `gauntlet assign`, `gauntlet execute`, and guarded `gauntlet transition` commands. Give each agent only its expiring capability token. Do not expose critic or verifier tokens to builders. Pass evidence IDs created by `gauntlet execute`; external files are not verdict evidence. The CLI's pack fingerprint, command capture, evidence hashes, dependency order, role capabilities, repair cap, and release-authority gate are hard invariants.
 
 Parallelize only independent read-only investigations or isolated slices. Never allow concurrent writers in the same workspace. Integrate passing slices in dependency order and rerun affected upstream contracts.
 
