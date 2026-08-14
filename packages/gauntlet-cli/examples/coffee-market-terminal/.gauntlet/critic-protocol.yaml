@@ -1,0 +1,2 @@
+isolation: { fresh_context: true, builder_rationale_hidden: true }
+verdict_schema: { verdict: PASS_OR_FAIL, evidence: [], largest_gap: null }
