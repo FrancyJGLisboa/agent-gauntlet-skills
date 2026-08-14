@@ -10,11 +10,20 @@ From a repository containing a compiled `.gauntlet/manifest.yaml`:
 npx @agent-gauntlet/cli run --host auto
 ```
 
+To compile a vague request and execute it in the same persisted operation:
+
+```bash
+npx @agent-gauntlet/cli deliver \\
+  --request "Build a production-grade A for B using the reference" \\
+  --source https://example.com/reference \\
+  --host auto
+```
+
 `run` detects an authenticated Codex, Claude Code, or GitHub Copilot CLI; launches a fresh process for every builder, critic, and verifier turn; runs declared tests itself; reacts to pass, repair, block, timeout, and invalid-output states; enforces repair and turn limits; resumes completed state; and exits only when every slice is independently verified or a machine-readable terminal error is reached. Use `--host codex`, `--host claude`, or `--host copilot` to pin the runtime.
 
 No capability token is placed in an agent prompt. The orchestrator alone owns evidence capture and state transitions. On success it writes `.gauntlet/product-passport.md` and `.gauntlet/product-passport.json`. Regenerate them with `npx @agent-gauntlet/cli explain`.
 
-The command consumes the user's existing authenticated CLI subscription/session. It does not translate a ChatGPT, Claude, or Copilot subscription into API credentials and never resumes one role's conversation for another role.
+The command consumes the user's existing authenticated CLI subscription/session. It does not translate a ChatGPT, Claude, or Copilot subscription into API credentials and never resumes one role's conversation for another role. Builder attempts run on isolated Git worktrees; critics and verifiers receive read-only permissions; only verified commits are integrated. Rerunning after interruption resumes the persisted building worktree.
 
 ```bash
 npm install
