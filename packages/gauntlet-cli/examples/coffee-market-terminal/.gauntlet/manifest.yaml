@@ -1,6 +1,9 @@
 gauntlet_version: 1
 status: executable
 objective_id: coffee-market-terminal-example
+reconstruction:
+  mode: mixed_evidence
+  identity: independent_implementation
 execution:
   strategy: vertical-slices
   isolated_workspaces: true
@@ -23,3 +26,8 @@ files:
   - critic-protocol.yaml
   - stop-policy.yaml
   - final-verification.yaml
+  - source-evidence.yaml
+  - product-reconstruction.yaml
+  - experience-contract.yaml
+  - production-readiness.yaml
+  - claim-traceability.yaml
