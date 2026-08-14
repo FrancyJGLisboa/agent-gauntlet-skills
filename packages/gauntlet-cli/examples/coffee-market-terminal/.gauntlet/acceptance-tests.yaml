@@ -1,0 +1,10 @@
+tests:
+  - id: unit-test
+    slice_id: core
+    cwd: ..
+    command: ["node", "--test"]
+  - id: clean-install
+    slice_id: distribution
+    cwd: ..
+    command: ["node", "scripts/verify-distribution.js"]
+    timeout_ms: 120000
