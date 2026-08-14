@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-gauntlet.dev/schemas/assignment.schema.json",
+  "type": "object",
+  "required": ["assignment_id", "slice_id", "role", "expires_at"],
+  "properties": {
+    "assignment_id": { "type": "string", "format": "uuid" },
+    "slice_id": { "type": "string", "minLength": 1 },
+    "role": { "enum": ["builder", "critic", "verifier", "engine"] },
+    "expires_at": { "type": "string", "format": "date-time" }
+  }
+}
