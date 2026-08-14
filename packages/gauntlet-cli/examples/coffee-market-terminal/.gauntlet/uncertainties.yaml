@@ -1,0 +1,5 @@
+items:
+  - id: live-source
+    status: blocked_access
+    safe_default: use clearly labeled immutable fixture
+    experiment: replace fixture only after source contract and licensing are verified
