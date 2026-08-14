@@ -1,0 +1,25 @@
+gauntlet_version: 1
+status: executable
+objective_id: coffee-market-terminal-example
+execution:
+  strategy: vertical-slices
+  isolated_workspaces: true
+  maximum_repairs_per_slice: 3
+human_dependency:
+  expected_technical_judgment: none
+  permitted_escalations: [access, spending_authority, irreversible_action, legal_or_licensing]
+files:
+  - manifest.yaml
+  - objective.yaml
+  - evidence.yaml
+  - reference-contract.yaml
+  - target-contracts.yaml
+  - semantic-mappings.yaml
+  - architecture-decisions.yaml
+  - distribution-contract.yaml
+  - uncertainties.yaml
+  - execution-dag.yaml
+  - acceptance-tests.yaml
+  - critic-protocol.yaml
+  - stop-policy.yaml
+  - final-verification.yaml
