@@ -21,12 +21,14 @@ const RECONSTRUCTION_MODES = new Set(['youtube_demonstration','blog_description'
 export const STATES = ['pending', 'building', 'critiquing', 'repairing', 'passed', 'failed', 'blocked', 'final_verification', 'verified'];
 const TRANSITIONS = {
   pending: ['building', 'blocked'],
-  building: ['critiquing', 'repairing', 'failed', 'blocked'],
-  critiquing: ['passed', 'repairing', 'failed', 'blocked'],
+  building: ['critiquing', 'repairing', 'pending', 'failed', 'blocked'],
+  critiquing: ['passed', 'repairing', 'pending', 'failed', 'blocked'],
   repairing: ['building', 'failed', 'blocked'],
-  passed: ['final_verification'],
+  passed: ['final_verification', 'repairing'],
   final_verification: ['verified', 'repairing', 'failed', 'blocked'],
-  failed: [], blocked: [], verified: []
+  // A slice returns to `pending` when an upstream defect invalidates its work, and a
+  // finished slice reopens to `repairing` when a dependent proves the defect is its own.
+  failed: [], blocked: [], verified: ['repairing']
 };
 
 function issue(code, message, file, pointer = '') { return { code, message, file, pointer }; }

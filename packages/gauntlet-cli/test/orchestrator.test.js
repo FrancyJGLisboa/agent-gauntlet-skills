@@ -93,3 +93,58 @@ test('deliver compiles a missing pack and runs it in one invocation',()=>{
   const result=deliverGauntlet({request:'Build the reference product',manifest:path.join(root,'.gauntlet/manifest.yaml'),adapter});
   assert.equal(compiled,true);assert.equal(result.completed,true);
 });
+
+const ok=(role,extra={})=>({verdict:role==='builder'?'complete':'pass',summary:'ok',reason:'passed',largest_gap:'none',changed_files:[],blocking_slice:'',...extra});
+
+test('a defect owned by an upstream slice reopens that slice instead of blocking', () => {
+  const root=project(); let downstreamAttempts=0, coreRebuilt=false; const events=[];
+  const adapter={name:'mock',invoke(input){
+    const isDownstream=input.prompt.includes('"id": "distribution"');
+    if(input.role==='builder'&&isDownstream){
+      downstreamAttempts++;
+      // The ui builder proves on its first attempt that the defect lives in core.
+      if(downstreamAttempts===1)return {verdict:'blocked',summary:'upstream defect',reason:'core exports the wrong shape',largest_gap:'core',changed_files:[],blocking_slice:'core'};
+      return ok('builder');
+    }
+    if(input.role==='builder'&&!isDownstream&&downstreamAttempts>0){coreRebuilt=true;fs.appendFileSync(path.join(input.cwd,'src/market.js'),'\n// upstream repair\n');}
+    return ok(input.role);
+  }};
+  const result=runGauntlet({manifest:path.join(root,'.gauntlet/manifest.yaml'),adapter,onEvent:e=>events.push(e)});
+  assert.equal(result.completed,true);
+  assert.ok(coreRebuilt,'the owning slice was rebuilt');
+  assert.equal(result.status.slices.find(s=>s.id==='core').repairs,1,'the reopened slice pays the repair');
+  assert.equal(result.status.slices.find(s=>s.id==='distribution').repairs,0,'the dependent does not pay for a defect it cannot fix');
+  assert.ok(events.some(e=>e.type==='upstream.repair'&&e.owner==='core'&&e.slice==='distribution'));
+  assert.match(fs.readFileSync(path.join(root,'src/market.js'),'utf8'),/upstream repair/);
+});
+
+test('only a genuine ancestor can be reopened', () => {
+  const root=project();
+  // core names distribution — its own dependent, not an ancestor — and must simply block.
+  const adapter={name:'mock',invoke(input){
+    if(input.role==='builder'&&input.prompt.includes('"id": "core"'))return {verdict:'blocked',summary:'x',reason:'blaming a downstream slice',largest_gap:'x',changed_files:[],blocking_slice:'distribution'};
+    return ok(input.role);
+  }};
+  assert.throws(()=>runGauntlet({manifest:path.join(root,'.gauntlet/manifest.yaml'),adapter}),e=>e.code==='RUN_TERMINAL');
+});
+
+test('an unknown blocking slice cannot reopen anything', () => {
+  const root=project();
+  const adapter={name:'mock',invoke(input){
+    if(input.role==='builder'&&input.prompt.includes('"id": "distribution"'))return {verdict:'blocked',summary:'x',reason:'invented an upstream slice',largest_gap:'x',changed_files:[],blocking_slice:'no-such-slice'};
+    return ok(input.role);
+  }};
+  assert.throws(()=>runGauntlet({manifest:path.join(root,'.gauntlet/manifest.yaml'),adapter}),e=>e.code==='RUN_TERMINAL');
+});
+
+test('an exhausted upstream repair budget blocks the dependent rather than looping', () => {
+  const root=project(); let events=[];
+  const adapter={name:'mock',invoke(input){
+    const isDownstream=input.prompt.includes('"id": "distribution"');
+    if(input.role==='builder'&&isDownstream)return {verdict:'blocked',summary:'x',reason:'still upstream',largest_gap:'x',changed_files:[],blocking_slice:'core'};
+    return ok(input.role);
+  }};
+  assert.throws(()=>runGauntlet({manifest:path.join(root,'.gauntlet/manifest.yaml'),adapter,onEvent:e=>events.push(e)}),e=>e.code==='RUN_TERMINAL');
+  assert.ok(events.some(e=>e.type==='upstream.exhausted'),'the loop terminates on the upstream cap');
+  assert.ok(events.filter(e=>e.type==='upstream.repair').length<=3,'reopening is bounded by the repair cap');
+});

@@ -19,7 +19,7 @@ function invoke(command,args,{cwd,timeoutMs=900000}) {
   if(result.status!==0)throw new AdapterError('AGENT_FAILED',`${command} exited with ${result.status}`,{stderr:String(result.stderr??'').slice(-4000)});
   return result.stdout;
 }
-const RESULT_SCHEMA={type:'object',additionalProperties:false,properties:{verdict:{type:'string',enum:['complete','pass','repair','blocked']},summary:{type:'string'},reason:{type:'string'},largest_gap:{type:'string'},changed_files:{type:'array',items:{type:'string'}}},required:['verdict','summary','reason','largest_gap','changed_files']};
+const RESULT_SCHEMA={type:'object',additionalProperties:false,properties:{verdict:{type:'string',enum:['complete','pass','repair','blocked']},summary:{type:'string'},reason:{type:'string'},largest_gap:{type:'string'},changed_files:{type:'array',items:{type:'string'}},blocking_slice:{type:'string',description:'Id of an upstream slice that owns the defect, when the failure cannot be fixed inside this slice. Empty otherwise.'}},required:['verdict','summary','reason','largest_gap','changed_files','blocking_slice']};
 class CodexAdapter {
   constructor(){this.name='codex';}
   invoke({prompt,cwd,runtimeDir,timeoutMs,role}) {
