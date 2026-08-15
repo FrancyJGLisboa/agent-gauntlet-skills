@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { RunStore, validatePack } from './engine.js';
-import { resolveAdapter } from './adapters.js';
+import { criteriaFor, RunStore, validatePack } from './engine.js';
+import { JUDGE_SCHEMA, resolveAdapter } from './adapters.js';
 import { WorkspaceManager } from './workspaces.js';
 
 export class GauntletError extends Error {
@@ -52,6 +52,36 @@ function reopenUpstream({store,v,workspaces,current,owner,reason,onEvent}) {
   store.transition({validation:v,token:dependent.token,sliceId:current.id,target:'pending',reason:`Awaiting upstream repair in ${owner}`});
   onEvent({type:'upstream.repair',slice:current.id,owner,reason});
   return true;
+}
+// Each judge is a separate process that sees two files named A and B, the question,
+// and nothing else — no objective, no slice, no builder rationale, no provenance.
+// Anything more would tell it which artifact is the incumbent.
+function judgePanel({agent,timeoutMs,onEvent,slice,workspaces,workspace}) {
+  return ({dir,a,b,question,judges})=>{
+  // Snapshot after the runtime has generated the candidate, so this asserts what it
+  // means to assert: the panel looked and changed nothing.
+  const before=workspaces.snapshot(workspace);
+  const votes=Array.from({length:judges},(_,i)=>{
+    const prompt=`You are judge ${i+1} of ${judges} in a blind comparison. Two artifacts are staged in ${dir}:\n  A: ${a}\n  B: ${b}\nOne was produced by an implementation under review and one is an independent reference, in an order you cannot infer; do not guess which is which, and do not let file size, timestamps, or naming influence you.\n\nQuestion: ${question}\n\nOpen both, compare them only against the question, and answer with the winner and the single decisive observable difference that decided it. Answer "tie" only when no observable difference bears on the question. Judge alone: you do not know the other judges' answers and must not speculate about consensus.`;
+    try{
+      const vote=agent.invoke({role:'judge',prompt,cwd:dir,runtimeDir:path.join(dir,'.runtime'),timeoutMs,schema:JUDGE_SCHEMA});
+      onEvent({type:'judge',slice,judge:i+1,winner:vote?.winner});
+      return vote;
+    }catch(error){ onEvent({type:'judge.failed',slice,judge:i+1,error:error.message}); return null; }
+  }).filter(Boolean);
+  workspaces.assertReadOnly(workspace,before);
+  return votes;
+  };
+}
+// A slice that declares qualitative criteria cannot pass on acceptance tests alone.
+function qualitativeVerdict({store,v,token,current,workspaces,workspace,agent,timeoutMs,onEvent}) {
+  for(const criterion of criteriaFor(v,current.id)){
+    const comparison=store.recordComparison({validation:v,token,sliceId:current.id,criterion,workspaceRoot:workspace.dir,
+      runJudges:judgePanel({agent,timeoutMs,onEvent,slice:current.id,workspaces,workspace})});
+    onEvent({type:'comparison',slice:current.id,criterion:criterion.id,outcome:comparison.outcome,candidate:comparison.candidate,reference:comparison.reference,tie:comparison.tie,quorum:comparison.quorum});
+    if(comparison.outcome!=='won') return {passed:false,criterion,comparison};
+  }
+  return {passed:true};
 }
 function capture(store,v,token,id,workspaceRoot){return testsFor(v,id).map(t=>store.recordExecution({validation:v,token,sliceId:id,testId:t.id,workspaceRoot}));}
 const met=e=>Boolean(e.satisfied);
@@ -114,9 +144,19 @@ export function runGauntlet({manifest='.gauntlet/manifest.yaml',host='auto',adap
         const a=store.assign({validation:v,sliceId:current.id,role:'critic'});
         const result=observe('critic',current.id,agent.invoke({role:'critic',prompt:rolePrompt('critic',v,spec,workspace.dir,evidence),cwd:workspace.dir,runtimeDir:path.join(v.root,'.runtime'),timeoutMs}));
         workspaces.assertReadOnly(workspace,before);
-        const pass=result.verdict==='pass'&&evidence.length===testsFor(v,current.id).length&&evidence.every(met);
-        if(!pass&&reopenUpstream({store,v,workspaces,current,owner:result.blocking_slice,reason:result.reason||result.largest_gap,onEvent}))continue;
-        store.transition({validation:v,token:a.token,sliceId:current.id,target:pass?'passed':result.verdict==='blocked'?'blocked':'repairing',evidenceIds:pass?ids(evidence):[],reason:result.reason||result.largest_gap});continue;
+        let pass=result.verdict==='pass'&&evidence.length===testsFor(v,current.id).length&&evidence.every(met);
+        let quality='';
+        if(pass){
+          const verdict=qualitativeVerdict({store,v,token:a.token,current,workspaces,workspace,agent,timeoutMs,onEvent});
+          if(!verdict.passed){
+            pass=false;
+            quality=verdict.comparison.outcome==='lost'
+              ? `The reference bar beat this implementation on "${verdict.criterion.question}" (${verdict.comparison.reference}/${verdict.comparison.judges} judges). Decisive differences: ${verdict.comparison.votes.map(x=>x.decisive_difference).filter(Boolean).join(' | ')}`
+              : `Blind comparison on "${verdict.criterion.question}" was INCONCLUSIVE: ${verdict.comparison.candidate} for, ${verdict.comparison.reference} against, ${verdict.comparison.tie} tied, quorum ${verdict.comparison.quorum} of ${verdict.comparison.judges}. Judges saw no agreed difference, which is not approval.`;
+          }
+        }
+        if(!pass&&reopenUpstream({store,v,workspaces,current,owner:result.blocking_slice,reason:quality||result.reason||result.largest_gap,onEvent}))continue;
+        store.transition({validation:v,token:a.token,sliceId:current.id,target:pass?'passed':result.verdict==='blocked'?'blocked':'repairing',evidenceIds:pass?ids(evidence):[],reason:quality||result.reason||result.largest_gap});continue;
       }
       if(current.state==='passed'){const a=store.assign({validation:v,sliceId:current.id,role:'engine'});store.transition({validation:v,token:a.token,sliceId:current.id,target:'final_verification',reason:'fresh final verifier dispatched'});continue;}
       if(current.state==='final_verification'){

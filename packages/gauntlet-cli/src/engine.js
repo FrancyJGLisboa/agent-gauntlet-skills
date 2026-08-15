@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
@@ -102,6 +103,39 @@ function requireKeys(doc, keys, file, errors) {
   for (const key of keys) if (!(key in doc)) errors.push(issue('REQUIRED_KEY', `Missing required key: ${key}`, file, key));
 }
 
+// Qualitative criteria are the only mechanism for judging whether work is *good*
+// rather than merely correct. Everything the runtime can decide for itself — which
+// candidate wears which label, how many judges, what counts as consensus — is
+// declared here so no agent can choose it at judging time.
+export function criteriaFor(validation, sliceId) {
+  return asArray(validation.documents?.['critic-protocol.yaml']?.qualitative?.criteria).filter(c => c?.slice_id === sliceId);
+}
+function validateCriticProtocol(documents, file, errors, warnings) {
+  const qualitative = documents[file]?.qualitative;
+  if (!qualitative) return;
+  const judges = qualitative.judges, agreement = qualitative.agreement;
+  if (!Number.isInteger(judges) || judges < 3) errors.push(issue('JUDGE_COUNT', 'Qualitative judging requires at least three independent judges', file, 'qualitative.judges'));
+  if (typeof agreement !== 'number' || agreement <= 0.5 || agreement > 1) errors.push(issue('AGREEMENT_THRESHOLD', 'Agreement threshold must be a fraction above 0.5 and at most 1', file, 'qualitative.agreement'));
+  // 0.67 across three judges is 2.01 votes, so it silently demands all three. Say so
+  // rather than letting an author discover it from an INCONCLUSIVE run.
+  if (Number.isInteger(judges) && typeof agreement === 'number' && agreement < 1 && Math.ceil(agreement * judges) >= judges) {
+    warnings.push(issue('EFFECTIVE_UNANIMITY', `An agreement of ${agreement} across ${judges} judges requires all ${judges} to agree; use ${((judges - 1) / judges).toFixed(2)} or lower to allow one dissent`, file, 'qualitative.agreement'));
+  }
+  const criteria = asArray(qualitative.criteria);
+  if (!criteria.length) return errors.push(issue('CRITERIA_EMPTY', 'Qualitative judging declares no criteria', file, 'qualitative.criteria'));
+  const slices = new Set(asArray(documents['execution-dag.yaml']?.slices).map(s => s.id)), seen = new Set();
+  for (const [i, c] of criteria.entries()) {
+    const p = `qualitative.criteria[${i}]`;
+    requireKeys(c, ['id', 'slice_id', 'question', 'candidate', 'artifact', 'reference'], file, errors);
+    if (seen.has(c?.id)) errors.push(issue('DUPLICATE_CRITERION', `Duplicate criterion id: ${c.id}`, file, `${p}.id`));
+    seen.add(c?.id);
+    if (c?.slice_id && !slices.has(c.slice_id)) errors.push(issue('UNKNOWN_CRITERION_SLICE', `Criterion targets unknown slice: ${c.slice_id}`, file, `${p}.slice_id`));
+    if (!Array.isArray(c?.candidate) || !c.candidate.length || c.candidate.some(v => typeof v !== 'string')) errors.push(issue('CANDIDATE_COMMAND', 'Criterion candidate must be a non-empty argv array; shell strings are prohibited', file, `${p}.candidate`));
+    // A bar the runtime cannot inspect is a bar an agent can claim to have cleared.
+    if (typeof c?.reference !== 'string' || !c.reference.trim()) errors.push(issue('REFERENCE_BAR', 'Criterion requires a reference artifact path to compare against', file, `${p}.reference`));
+  }
+}
+
 function validateArchitecture(doc, file, errors) {
   const decisions = asArray(doc?.decisions ?? doc?.components ?? doc);
   if (!decisions.length) return errors.push(issue('ARCHITECTURE_EMPTY', 'At least one architecture decision is required', file));
@@ -195,6 +229,31 @@ export function evaluateAssertions(spec, { exitCode, stdout, stderr }) {
   return { satisfied: failures.length === 0, failures };
 }
 
+// The CLI, not the judge and not the builder, decides which artifact wears which
+// label. A judge that could infer which side is the incumbent is not blind.
+export function assignLabels(nonce = crypto.randomBytes(8).toString('hex')) {
+  const candidateIsA = crypto.createHash('sha256').update(nonce).digest()[0] % 2 === 0;
+  return { nonce, candidate: candidateIsA ? 'A' : 'B', reference: candidateIsA ? 'B' : 'A' };
+}
+// Consensus is arithmetic the runtime performs on individual votes. A judge may
+// report what it saw; it may never report that the panel agreed.
+export function tallyComparison({ votes, labels, judges, agreement, allowTie = false }) {
+  const cast = asArray(votes).filter(v => ['A','B','tie'].includes(v?.winner));
+  const counted = { candidate: 0, reference: 0, tie: 0 };
+  for (const vote of cast) {
+    if (vote.winner === 'tie') counted.tie++;
+    else if (vote.winner === labels.candidate) counted.candidate++;
+    else counted.reference++;
+  }
+  const quorum = Math.ceil(agreement * judges);
+  const forCandidate = counted.candidate + (allowTie ? counted.tie : 0);
+  const outcome = cast.length < judges ? 'inconclusive'
+    : forCandidate >= quorum ? 'won'
+    : counted.reference >= quorum ? 'lost'
+    : 'inconclusive';
+  return { outcome, quorum, votes_counted: cast.length, ...counted };
+}
+
 export function validatePack(manifestPath = '.gauntlet/manifest.yaml') {
   const absoluteManifest = path.resolve(manifestPath);
   const root = path.dirname(absoluteManifest);
@@ -225,6 +284,7 @@ export function validatePack(manifestPath = '.gauntlet/manifest.yaml') {
   if (documents['distribution-contract.yaml']) validateDistribution(documents['distribution-contract.yaml'], 'distribution-contract.yaml', errors);
   if (documents['semantic-mappings.yaml']) validateMappings(documents['semantic-mappings.yaml'], 'semantic-mappings.yaml', errors);
   if (documents['execution-dag.yaml']) validateDag(documents['execution-dag.yaml'], 'execution-dag.yaml', errors);
+  if (documents['critic-protocol.yaml']) validateCriticProtocol(documents, 'critic-protocol.yaml', errors, warnings);
   if(reconstructionEnabled) validateReconstruction(documents,errors);
   const stop = documents['stop-policy.yaml'];
   if (stop && (stop.retry?.maximum_repairs_per_slice ?? 4) > 3) errors.push(issue('REPAIR_LIMIT', 'Stop policy repair limit cannot exceed 3', 'stop-policy.yaml', 'retry.maximum_repairs_per_slice'));
@@ -253,6 +313,12 @@ export class RunStore {
         signal TEXT, stdout_sha256 TEXT NOT NULL, stderr_sha256 TEXT NOT NULL,
         artifact_path TEXT NOT NULL, git_commit TEXT, git_dirty INTEGER NOT NULL,
         satisfied INTEGER NOT NULL DEFAULT 0, assertion_failures TEXT NOT NULL DEFAULT '[]',
+        FOREIGN KEY(assignment_id) REFERENCES assignments(id)
+      );
+      CREATE TABLE IF NOT EXISTS comparisons (
+        id TEXT PRIMARY KEY, assignment_id TEXT NOT NULL, slice_id TEXT NOT NULL,
+        criterion_id TEXT NOT NULL, fingerprint TEXT NOT NULL, completed_at TEXT NOT NULL,
+        outcome TEXT NOT NULL, labels_json TEXT NOT NULL, votes_json TEXT NOT NULL, artifact_path TEXT NOT NULL,
         FOREIGN KEY(assignment_id) REFERENCES assignments(id)
       );
       CREATE TABLE IF NOT EXISTS events (
@@ -346,6 +412,53 @@ export class RunStore {
     fs.writeFileSync(artifactPath, `${JSON.stringify(artifact,null,2)}\n`, { mode:0o600 });
     this.db.prepare('INSERT INTO evidence VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(id, assignment.id, sliceId, testId, validation.fingerprint, completed, JSON.stringify(spec.command), cwd, result.status, result.signal, artifact.stdout_sha256, artifact.stderr_sha256, artifactPath, gitCommit, gitDirty?1:0, verdict.satisfied?1:0, JSON.stringify(verdict.failures));
     return artifact;
+  }
+  // runJudges({ dir, question, judges }) is supplied by the dispatcher so this stays
+  // free of any agent host, while the runtime keeps the parts that must not be
+  // delegated: producing the candidate, blinding it, and counting the votes.
+  recordComparison({ validation, token, sliceId, criterion, workspaceRoot, runJudges }) {
+    this.assertFingerprint(validation.fingerprint);
+    const assignment = this.authenticate(token, sliceId, ['critic','verifier']);
+    const qualitative = validation.documents['critic-protocol.yaml'].qualitative;
+    const repoRoot = path.resolve(validation.root, '..'), workRoot = workspaceRoot ?? repoRoot;
+    const started = new Date().toISOString();
+    const candidatePath = path.resolve(workRoot, criterion.artifact), referencePath = path.resolve(repoRoot, criterion.reference);
+    for (const [label, file, root] of [['candidate', candidatePath, workRoot], ['reference', referencePath, repoRoot]]) {
+      if (!file.startsWith(`${root}${path.sep}`)) throw new Error(`Comparison ${label} escapes the repository root`);
+    }
+    // Whether the artifact predates this comparison decides whether the runtime may
+    // delete it afterwards; a generated file left behind reads to the next builder's
+    // checkpoint as an out-of-scope change.
+    const preexisting = fs.existsSync(candidatePath);
+    const produced = spawnSync(criterion.candidate[0], criterion.candidate.slice(1), { cwd: workRoot, encoding: 'utf8', timeout: criterion.timeout_ms ?? 300000,
+      env: Object.fromEntries((criterion.env_allowlist ?? ['PATH','HOME','TMPDIR']).filter(k => process.env[k] !== undefined).map(k => [k, process.env[k]])) });
+    for (const [label, file] of [['candidate', candidatePath], ['reference', referencePath]]) {
+      if (!fs.existsSync(file)) throw new Error(`Comparison ${label} artifact is missing: ${file}${produced.status !== 0 ? ` (candidate command exited ${produced.status})` : ''}`);
+    }
+    const labels = assignLabels();
+    // Staged outside the worktree under neutral names: a judge that can see a path,
+    // an extension pair, or surrounding git metadata can guess which side is new.
+    const stage = fs.mkdtempSync(path.join(os.tmpdir(), 'gauntlet-blind-'));
+    const extension = path.extname(candidatePath) || path.extname(referencePath);
+    const staged = { A: path.join(stage, `A${extension}`), B: path.join(stage, `B${extension}`) };
+    fs.copyFileSync(candidatePath, staged[labels.candidate]);
+    fs.copyFileSync(referencePath, staged[labels.reference]);
+    const digests = { candidate_sha256: sha256(fs.readFileSync(candidatePath)), reference_sha256: sha256(fs.readFileSync(referencePath)) };
+    let votes;
+    try { votes = asArray(runJudges({ dir: stage, a: staged.A, b: staged.B, question: criterion.question, judges: qualitative.judges })); }
+    finally { fs.rmSync(stage, { recursive: true, force: true }); }
+    const tally = tallyComparison({ votes, labels, judges: qualitative.judges, agreement: qualitative.agreement, allowTie: criterion.allow_tie === true });
+    const id = crypto.randomUUID(), dir = path.join(validation.root, 'runs', sliceId);
+    fs.mkdirSync(dir, { recursive: true });
+    const artifactPath = path.join(dir, `${criterion.id}-${id}.json`);
+    if (!preexisting) fs.rmSync(candidatePath, { force: true });
+    const record = { comparison_id: id, assignment_id: assignment.id, slice_id: sliceId, criterion_id: criterion.id,
+      pack_fingerprint: validation.fingerprint, started_at: started, completed_at: new Date().toISOString(),
+      question: criterion.question, candidate_command: criterion.candidate, ...digests, labels, judges: qualitative.judges, agreement: qualitative.agreement,
+      votes: asArray(votes), ...tally };
+    fs.writeFileSync(artifactPath, `${JSON.stringify(record, null, 2)}\n`, { mode: 0o600 });
+    this.db.prepare('INSERT INTO comparisons VALUES(?,?,?,?,?,?,?,?,?,?)').run(id, assignment.id, sliceId, criterion.id, validation.fingerprint, record.completed_at, tally.outcome, JSON.stringify(labels), JSON.stringify(record.votes), artifactPath);
+    return record;
   }
   transition({ validation, token, sliceId, target, evidenceIds = [], reason = '' }) {
     this.assertFingerprint(validation.fingerprint);

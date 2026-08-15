@@ -148,3 +148,90 @@ test('an exhausted upstream repair budget blocks the dependent rather than loopi
   assert.ok(events.some(e=>e.type==='upstream.exhausted'),'the loop terminates on the upstream cap');
   assert.ok(events.filter(e=>e.type==='upstream.repair').length<=3,'reopening is bounded by the repair cap');
 });
+
+// A pack whose `core` slice must beat a reference artifact, judged blind by three.
+function qualitativeProject(agreement='0.66',allowTie=false){
+  const root=project();
+  fs.mkdirSync(path.join(root,'ref'),{recursive:true});
+  fs.writeFileSync(path.join(root,'ref','bar.txt'),'the reference bar\n');
+  // the fixture repo is "type": "module", so the generator must be ESM
+  fs.writeFileSync(path.join(root,'make-candidate.js'),`import fs from 'node:fs';\nfs.mkdirSync('out',{recursive:true});\nfs.writeFileSync('out/candidate.txt','the candidate\\n');\n`);
+  fs.writeFileSync(path.join(root,'.gauntlet','critic-protocol.yaml'),
+    `isolation: { fresh_context: true }\nqualitative:\n  judges: 3\n  agreement: ${agreement}\n  criteria:\n    - id: polish\n      slice_id: core\n      question: Which reads as the more polished product?\n      candidate: ["node", "make-candidate.js"]\n      artifact: out/candidate.txt\n      reference: ref/bar.txt\n      allow_tie: ${allowTie}\n`);
+  spawnSync('git',['add','.'],{cwd:root});spawnSync('git',['-c','user.name=Test','-c','user.email=test@example.test','commit','-qm','qualitative'],{cwd:root});
+  return root;
+}
+function panel(votes){
+  let i=0;
+  return {name:'mock',invoke(input){
+    if(input.role==='judge')return {winner:votes[i++%votes.length],decisive_difference:'wording'};
+    return ok(input.role);
+  }};
+}
+
+test('a slice cannot pass on tests alone when it declares a reference bar', () => {
+  const root=qualitativeProject(); const events=[]; const judgePrompts=[];
+  // Judges vote for whichever label holds the candidate, so the outcome does not ride
+  // on the runtime's coin flip — only the blinding of the prompt is under test here.
+  const adapter={name:'mock',invoke(input){
+    if(input.role==='judge'){
+      judgePrompts.push(input.prompt);
+      const a=input.prompt.match(/A: (\S+)/)[1];
+      return {winner:fs.readFileSync(a,'utf8').includes('candidate')?'A':'B',decisive_difference:'crisper wording'};
+    }
+    return ok(input.role);
+  }};
+  const result=runGauntlet({manifest:path.join(root,'.gauntlet/manifest.yaml'),adapter,onEvent:e=>events.push(e)});
+  const comparison=events.find(e=>e.type==='comparison');
+  assert.ok(comparison,'the comparison ran');
+  assert.equal(events.filter(e=>e.type==='judge').length>=3,true,'three judges voted');
+  assert.equal(judgePrompts.length>=3,true);
+  for(const prompt of judgePrompts){
+    assert.ok(!prompt.includes('candidate.txt'),'the judge never sees the candidate filename');
+    assert.ok(!prompt.includes('ref/bar.txt'),'nor the reference path');
+    assert.ok(!prompt.includes('make-candidate.js'),'nor how the candidate was produced');
+    assert.match(prompt,/Which reads as the more polished product\?/);
+  }
+  assert.equal(comparison.outcome,'won');
+  assert.equal(result.completed,true,'clearing the bar lets the slice pass');
+});
+
+test('losing to the reference bar sends the slice back to its builder', () => {
+  const root=qualitativeProject(); const events=[];
+  // Judges always pick whichever label the reference wears.
+  let labels;
+  const adapter={name:'mock',invoke(input){
+    if(input.role==='judge'){
+      const a=input.prompt.match(/A: (\S+)/)[1];
+      const isReferenceA=fs.readFileSync(a,'utf8').includes('reference');
+      labels=isReferenceA?'A':'B';
+      return {winner:labels,decisive_difference:'the other one is unfinished'};
+    }
+    return ok(input.role);
+  }};
+  assert.throws(()=>runGauntlet({manifest:path.join(root,'.gauntlet/manifest.yaml'),adapter,onEvent:e=>events.push(e)}),/Repair limit exceeded/);
+  assert.ok(events.filter(e=>e.type==='comparison').every(e=>e.outcome==='lost'));
+});
+
+test('a split panel is inconclusive, and inconclusive is not approval', () => {
+  const root=qualitativeProject(); const events=[];
+  assert.throws(()=>runGauntlet({manifest:path.join(root,'.gauntlet/manifest.yaml'),adapter:panel(['A','B','tie']),onEvent:e=>events.push(e)}),/Repair limit exceeded/);
+  const comparisons=events.filter(e=>e.type==='comparison');
+  assert.ok(comparisons.length>0);
+  assert.ok(comparisons.every(e=>e.outcome==='inconclusive'),'a divided panel never passes the slice');
+});
+
+test('a judge that fails to answer is not counted as agreement', () => {
+  const root=qualitativeProject(); const events=[];
+  const adapter={name:'mock',invoke(input){
+    // The first seat never returns a vote; the other two agree on A every time.
+    if(input.role==='judge'){
+      if(input.prompt.includes('judge 1 of 3'))throw new Error('judge process died');
+      return {winner:'A',decisive_difference:'x'};
+    }
+    return ok(input.role);
+  }};
+  assert.throws(()=>runGauntlet({manifest:path.join(root,'.gauntlet/manifest.yaml'),adapter,onEvent:e=>events.push(e)}),/Repair limit exceeded/);
+  assert.ok(events.some(e=>e.type==='judge.failed'),'the failure is recorded');
+  assert.ok(events.filter(e=>e.type==='comparison').some(e=>e.outcome==='inconclusive'),'a missing vote cannot complete a quorum');
+});

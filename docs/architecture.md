@@ -25,6 +25,7 @@ flowchart TD
 | Building | Implementation within a slice | Worktree, declared scope, role capability |
 | Testing | Nothing about recorded outcomes | Command argv, cwd boundary, timeout, hashes, artifacts, declared assertions |
 | Criticism | Semantic pass/repair judgment | Fresh process, read-only permissions, evidence ownership |
+| Qualitative judging | Which of two anonymous artifacts is better, and why | Candidate generation, A/B label assignment, neutral staging, panel size, quorum arithmetic |
 | Verification | Falsification and final judgment | Successful independent evidence and legal transition |
 | Integration | Nothing | Verified state, unchanged base commit, cherry-pick |
 | Release | Artifact preparation | External HMAC authority |
@@ -50,6 +51,30 @@ stateDiagram-v2
     critiquing --> blocked
     final_verification --> blocked
 ```
+
+## Judging quality, not only correctness
+
+An acceptance test proves a program behaves. It cannot prove the result is any good. For that, `critic-protocol.yaml` may declare `qualitative` criteria, each naming a **reference bar** — a real artifact the work must beat — and the argv command that produces the candidate:
+
+```yaml
+qualitative:
+  judges: 3               # at least three
+  agreement: 0.66         # fraction that must agree; 0.67 across 3 judges means all 3
+  criteria:
+    - id: home-polish
+      slice_id: ui
+      question: Which reads as the more polished, trustworthy product?
+      candidate: ["node", "scripts/screenshot.mjs"]
+      artifact: out/home.png
+      reference: reference/linear-home.png
+      allow_tie: false
+```
+
+A slice with criteria cannot pass on acceptance tests alone. After the tests pass, the runtime runs the candidate command, stages the candidate and the bar in a temporary directory under neutral names `A` and `B`, and dispatches `judges` independent read-only processes that see the two paths and the question — no objective, no slice, no builder rationale, no provenance. The CLI chooses which artifact wears which label from a recorded nonce, so no judge can infer which side is the incumbent, and the tally is arithmetic the runtime performs on individual votes: a judge reports what it saw and has no field in which to declare consensus.
+
+Outcomes are `won` (candidate reaches quorum), `lost` (the bar reaches quorum, sending the slice back to its builder), and `inconclusive` — a divided panel, or a judge that failed to answer. Inconclusive is never approval. Each comparison is written to `.gauntlet/runs/` with both digests, the label mapping, and every vote.
+
+The runtime deletes a candidate artifact it generated, so a later builder checkpoint does not read it as an out-of-scope change.
 
 Each acceptance test may declare `assertions` — `exit_code`, plus `stdout_`/`stderr_` `equals`, `contains`, or `matches`. The runtime evaluates them when it captures evidence and records a `satisfied` flag; only satisfied evidence can support `passed` or `verified`. A test declaring no assertions still means exit code zero. This lets a pack verify error paths, which a hard-coded exit-code-zero rule cannot express. Unsupported or malformed assertions fail closed so an inert assertion can never read as a pass.
 

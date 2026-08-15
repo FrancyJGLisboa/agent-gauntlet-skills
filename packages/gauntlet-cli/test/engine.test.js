@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { evaluateAssertions, initialState, nextSlices, RunStore, transition, validatePack } from '../src/engine.js';
+import { assignLabels, evaluateAssertions, initialState, nextSlices, RunStore, tallyComparison, transition, validatePack } from '../src/engine.js';
 
 const VALID = {
   'manifest.yaml': `gauntlet_version: 1\nstatus: executable\nobjective_id: demo\nexecution:\n  maximum_repairs_per_slice: 3\nhuman_dependency: {}\nfiles:\n${['manifest.yaml','objective.yaml','evidence.yaml','reference-contract.yaml','target-contracts.yaml','semantic-mappings.yaml','architecture-decisions.yaml','distribution-contract.yaml','uncertainties.yaml','execution-dag.yaml','acceptance-tests.yaml','critic-protocol.yaml','stop-policy.yaml','final-verification.yaml'].map(f=>`  - ${f}`).join('\n')}\n`,
@@ -218,4 +218,50 @@ test('negated stream assertions let a pack forbid output such as stack traces', 
   const leaked = evaluateAssertions(spec, { exitCode: 3, stdout: '', stderr: 'boom\n    at read (/app/src/cli.js:12:9)\n' });
   assert.equal(leaked.satisfied, false);
   assert.match(leaked.failures[0], /stderr did not avoid matching/);
+});
+
+test('qualitative judging must declare a panel, a threshold, and an inspectable bar', () => {
+  const codes = doc => validatePack(pack({ 'critic-protocol.yaml': doc }).manifest).errors.map(e => e.code);
+  assert.deepEqual(codes('isolation: { fresh_context: true }\n'), [], 'a pack without qualitative criteria is unaffected');
+  const thin = codes('qualitative:\n  judges: 2\n  agreement: 0.5\n  criteria: []\n');
+  assert.ok(thin.includes('JUDGE_COUNT'), 'two judges is not a panel');
+  assert.ok(thin.includes('AGREEMENT_THRESHOLD'), 'a bare majority is not agreement');
+  assert.ok(thin.includes('CRITERIA_EMPTY'));
+  const bad = codes(`qualitative:\n  judges: 3\n  agreement: 0.67\n  criteria:\n    - id: polish\n      slice_id: nowhere\n      question: Which looks better?\n      candidate: "npm run shot"\n      artifact: out/a.png\n      reference: ""\n`);
+  assert.ok(bad.includes('UNKNOWN_CRITERION_SLICE'));
+  assert.ok(bad.includes('CANDIDATE_COMMAND'), 'a shell string is not an argv array');
+  assert.ok(bad.includes('REFERENCE_BAR'), 'a criterion without a bar is unjudgeable');
+});
+
+test('the runtime, not the judge, decides which artifact is A', () => {
+  const seen = new Set();
+  for (let i = 0; i < 200; i++) seen.add(assignLabels().candidate);
+  assert.deepEqual([...seen].sort(), ['A','B'], 'both orderings occur');
+  const fixed = assignLabels('a-fixed-nonce');
+  assert.equal(assignLabels('a-fixed-nonce').candidate, fixed.candidate, 'the mapping is reproducible from its recorded nonce');
+  assert.notEqual(fixed.candidate, fixed.reference);
+});
+
+test('consensus is arithmetic on individual votes, never a judge\'s claim', () => {
+  const labels = { candidate: 'B', reference: 'A' };
+  const tally = (votes, extra = {}) => tallyComparison({ votes, labels, judges: 3, agreement: 0.66, ...extra });
+  assert.equal(tally([{winner:'B'},{winner:'B'},{winner:'A'}]).outcome, 'won');
+  assert.equal(tally([{winner:'A'},{winner:'A'},{winner:'B'}]).outcome, 'lost');
+  // The declared threshold decides, not a bare majority: 0.67 across three judges is
+  // 2.01 votes, so two agreeing judges are one short of the bar the pack asked for.
+  assert.equal(tallyComparison({votes:[{winner:'B'},{winner:'B'},{winner:'A'}],labels,judges:3,agreement:0.67}).outcome, 'inconclusive');
+  assert.equal(tallyComparison({votes:[{winner:'B'},{winner:'B'},{winner:'A'}],labels,judges:3,agreement:1}).outcome, 'inconclusive');
+  assert.equal(tally([{winner:'B'},{winner:'A'},{winner:'tie'}]).outcome, 'inconclusive', 'a split panel is not approval');
+  assert.equal(tally([{winner:'B'},{winner:'tie'},{winner:'tie'}]).outcome, 'inconclusive');
+  assert.equal(tally([{winner:'B'},{winner:'tie'},{winner:'tie'}], {allowTie:true}).outcome, 'won', 'ties count for the candidate only when the criterion allows it');
+  assert.equal(tally([{winner:'B'},{winner:'B'}]).outcome, 'inconclusive', 'a judge that failed to vote cannot be assumed to agree');
+  assert.equal(tally([{winner:'B'},{winner:'B'},{winner:'yes please'}]).outcome, 'inconclusive', 'an unparseable vote is not a vote');
+});
+
+test('a threshold that silently demands unanimity is reported as a warning', () => {
+  const strict = validatePack(pack({ 'critic-protocol.yaml': `qualitative:\n  judges: 3\n  agreement: 0.67\n  criteria:\n    - id: polish\n      slice_id: core\n      question: Which looks better?\n      candidate: ["node", "shot.js"]\n      artifact: out/a.png\n      reference: ref/bar.png\n` }).manifest);
+  assert.equal(strict.valid, true, 'unanimity is legal, merely surprising');
+  assert.ok(strict.warnings.some(w => w.code === 'EFFECTIVE_UNANIMITY'));
+  const relaxed = validatePack(pack({ 'critic-protocol.yaml': `qualitative:\n  judges: 3\n  agreement: 0.66\n  criteria:\n    - id: polish\n      slice_id: core\n      question: Which looks better?\n      candidate: ["node", "shot.js"]\n      artifact: out/a.png\n      reference: ref/bar.png\n` }).manifest);
+  assert.deepEqual(relaxed.warnings, [], 'a threshold one dissent can survive warns about nothing');
 });

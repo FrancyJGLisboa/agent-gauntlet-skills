@@ -65,7 +65,7 @@ Parallelize only independent read-only investigations or isolated slices. Never 
 
 Reject verdicts based on code appearance, effort, generic praise, unexecuted assumptions, or numeric taste scores. A critic must cite commands, artifacts, output differences, or blinded comparisons.
 
-For qualitative criteria, randomize candidate labels and use the pack's minimum number of independent judges. Judges must make pairwise selections and name the decisive observable gap. Apply the declared agreement rule; disagreement below threshold is `INCONCLUSIVE`, not approval.
+Qualitative criteria are enforced by the runtime, not by you. When `critic-protocol.yaml` declares a `qualitative` block, a slice cannot pass on acceptance tests alone: the CLI generates the candidate, assigns the A/B labels, stages both sides anonymously, dispatches the declared number of independent read-only judges, and applies the agreement rule itself. Never assemble a panel by hand, never tell a judge which artifact is the candidate, and never read a split panel as approval — disagreement below the threshold is `INCONCLUSIVE`, which returns the slice to its builder.
 
 The builder must never be the final critic of its own slice.
 

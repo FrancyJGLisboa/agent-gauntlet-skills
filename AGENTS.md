@@ -55,7 +55,8 @@ See [docs/using-on-your-projects.md](docs/using-on-your-projects.md) for driving
 7. Only final-verified worktree commits may be integrated into the target branch.
 8. Repair loops remain bounded to three or fewer attempts per slice.
 9. Proxies, unknowns, unavailable mappings, and speculative claims must never be presented as equivalent or proven.
-10. Publishing and deployment require an external authority capability. Agents may prepare but cannot self-authorize release.
+10. Qualitative criteria are judged blind against a declared reference bar. The runtime — never an agent — generates the candidate, assigns the A/B labels, and computes agreement; a split or incomplete panel is `INCONCLUSIVE`, which is not approval.
+11. Publishing and deployment require an external authority capability. Agents may prepare but cannot self-authorize release.
 
 If a requested change weakens one of these invariants, reject that design and implement a safer alternative.
 
