@@ -9,18 +9,18 @@ Read this file before changing anything. Then read [docs/architecture.md](docs/a
 The primary experience is one invocation:
 
 ```bash
-npx @agent-gauntlet/cli deliver --request-file gauntlet-request.md --host auto
+npx @promptcompletion/cli deliver --request-file gauntlet-request.md --host auto
 ```
 
 If `.gauntlet/manifest.yaml` already exists:
 
 ```bash
-npx @agent-gauntlet/cli run --host auto
+npx @promptcompletion/cli run --host auto
 ```
 
 `deliver` compiles and validates the pack, then calls the same execution engine as `run`. A successful run ends only after every slice reaches `verified` and a Product Passport is written.
 
-Other diagnostic interfaces are `npx @agent-gauntlet/cli validate` and `npx @agent-gauntlet/cli explain`.
+Other diagnostic interfaces are `npx @promptcompletion/cli validate` and `npx @promptcompletion/cli explain`.
 
 The package is not yet published to npm, so the `npx` forms above fail with a 404 today. Until it is published, install from a clone and use the `gauntlet` binary:
 

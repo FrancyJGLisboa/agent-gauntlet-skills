@@ -259,7 +259,7 @@ MIT
 After a Gauntlet Pack exists, run:
 
 ```bash
-npx @agent-gauntlet/cli run --host auto
+npx @promptcompletion/cli run --host auto
 ```
 
 The package is not published to npm yet, so that command 404s today. Until it is, install the CLI from your clone and use the `gauntlet` binary:

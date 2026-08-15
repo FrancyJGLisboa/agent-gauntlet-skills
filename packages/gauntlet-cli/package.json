@@ -1,5 +1,5 @@
 {
-  "name": "@agent-gauntlet/cli",
+  "name": "@promptcompletion/cli",
   "version": "0.6.0",
   "description": "Deterministic policy and state engine for Agent Gauntlet packs",
   "type": "module",
