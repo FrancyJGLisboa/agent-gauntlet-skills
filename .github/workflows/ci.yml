@@ -26,6 +26,7 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm pack --dry-run
+      - run: node scripts/verify-package.mjs .
       - run: node scripts/validate-skills.mjs ../../skills
       - run: node scripts/verify-agent-docs.mjs ../..
   install-smoke:
