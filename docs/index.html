@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Gauntlet — software an agent can't fake finishing</title>
+<meta name="description" content="AI agents build software fast. Agent Gauntlet makes them prove it works — isolated builders, independent critics, evidence the runtime captures itself, and a verdict that arrives without you supervising it.">
+<style>
+  :root {
+    --bg: #fbfbfa; --surface: #ffffff; --line: #e4e2dd; --line-soft: #efedea;
+    --ink: #1a1a19; --ink-soft: #55534e; --ink-faint: #86837c;
+    --accent: #7a4a2b; --accent-soft: #f3ece6;
+    --good: #2f6b46; --warn: #8a5a12; --stop: #96341f;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    --sans: ui-sans-serif, -apple-system, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+    --serif: ui-serif, Georgia, "Iowan Old Style", "Times New Roman", serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #131313; --surface: #1a1a1a; --line: #2e2d2b; --line-soft: #242322;
+      --ink: #eceae6; --ink-soft: #b0aca4; --ink-faint: #7e7a73;
+      --accent: #d99a6c; --accent-soft: #2a211b;
+      --good: #7fbc95; --warn: #d6a95f; --stop: #e08066;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #131313; --surface: #1a1a1a; --line: #2e2d2b; --line-soft: #242322;
+    --ink: #eceae6; --ink-soft: #b0aca4; --ink-faint: #7e7a73;
+    --accent: #d99a6c; --accent-soft: #2a211b;
+    --good: #7fbc95; --warn: #d6a95f; --stop: #e08066;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: var(--sans); font-size: 17px; line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 46rem; margin: 0 auto; padding: 0 1.5rem; }
+  a { color: var(--accent); text-underline-offset: 3px; }
+  code { font-family: var(--mono); font-size: 0.87em; }
+  h1, h2, h3 { line-height: 1.2; letter-spacing: -0.02em; }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 4rem 0; }
+
+  header { padding: 5.5rem 0 3rem; }
+  .eyebrow {
+    font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--ink-faint); margin: 0 0 1.5rem;
+  }
+  h1 {
+    font-family: var(--serif); font-weight: 500; font-size: clamp(2.1rem, 6vw, 3.1rem);
+    margin: 0 0 1.25rem;
+  }
+  .lede { font-size: clamp(1.05rem, 2.5vw, 1.2rem); color: var(--ink-soft); margin: 0 0 2rem; max-width: 34rem; }
+  .lede strong { color: var(--ink); font-weight: 600; }
+
+  pre {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+    padding: 1rem 1.15rem; overflow-x: auto; font-family: var(--mono);
+    font-size: 0.82rem; line-height: 1.7; margin: 1.5rem 0;
+  }
+  pre .c { color: var(--ink-faint); }
+  pre .k { color: var(--accent); }
+
+  h2 {
+    font-family: var(--serif); font-weight: 500; font-size: clamp(1.5rem, 4vw, 1.85rem);
+    margin: 0 0 1rem;
+  }
+  h3 { font-size: 1rem; font-weight: 650; margin: 2rem 0 0.5rem; letter-spacing: 0; }
+  p { margin: 0 0 1.1rem; }
+  section > p:last-child { margin-bottom: 0; }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 12px; padding: 1.5rem; margin: 1.5rem 0;
+  }
+
+  .guarantees { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+  .guarantees li {
+    padding: 0.9rem 0 0.9rem 1.9rem; border-top: 1px solid var(--line-soft);
+    position: relative; color: var(--ink-soft);
+  }
+  .guarantees li:first-child { border-top: 0; }
+  .guarantees li::before {
+    content: ""; position: absolute; left: 0.25rem; top: 1.42rem;
+    width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--accent);
+  }
+  .guarantees b { color: var(--ink); font-weight: 620; }
+
+  .flow { display: grid; gap: 0.5rem; margin: 2rem 0; }
+  .step {
+    display: grid; grid-template-columns: 1.75rem 1fr; gap: 0.9rem;
+    align-items: baseline; padding: 0.85rem 0; border-top: 1px solid var(--line-soft);
+  }
+  .step:first-child { border-top: 0; }
+  .step .n {
+    font-family: var(--mono); font-size: 0.72rem; color: var(--accent);
+    background: var(--accent-soft); border-radius: 5px; padding: 0.15rem 0;
+    text-align: center; line-height: 1.5;
+  }
+  .step b { display: block; font-weight: 620; }
+  .step span { color: var(--ink-soft); font-size: 0.94rem; }
+
+  .split { display: grid; gap: 1rem; grid-template-columns: 1fr 1fr; margin: 1.5rem 0; }
+  @media (max-width: 34rem) { .split { grid-template-columns: 1fr; } }
+  .split > div { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 1.25rem; }
+  .split h4 { margin: 0 0 0.6rem; font-size: 0.78rem; font-family: var(--mono);
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); font-weight: 500; }
+  .split p { font-size: 0.94rem; color: var(--ink-soft); margin: 0; }
+
+  .verdict { font-family: var(--mono); font-size: 0.8rem; }
+  .verdict .ok { color: var(--good); } .verdict .no { color: var(--stop); }
+
+  table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; font-size: 0.94rem; }
+  th, td { text-align: left; padding: 0.7rem 0.6rem; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+  th { font-size: 0.74rem; font-family: var(--mono); letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--ink-faint); font-weight: 500; }
+  td:first-child { color: var(--ink); font-weight: 560; white-space: nowrap; }
+  td:last-child { color: var(--ink-soft); }
+  .scroll { overflow-x: auto; }
+
+  .note {
+    border-left: 2px solid var(--accent); padding: 0.2rem 0 0.2rem 1.1rem;
+    color: var(--ink-soft); margin: 1.5rem 0; font-size: 0.96rem;
+  }
+
+  footer {
+    margin-top: 5rem; padding: 2.5rem 0 4rem; border-top: 1px solid var(--line);
+    color: var(--ink-faint); font-size: 0.88rem;
+  }
+  footer a { margin-right: 1.25rem; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">Agent Gauntlet</p>
+  <h1>Agents can write the code. This makes them prove it works.</h1>
+  <p class="lede">Ask for what you want in your own words. Independent agents build it, try to tear it down, and repair what breaks — while a deterministic runtime, not the agents, decides what counts as done. <strong>You get a verdict, not a claim.</strong></p>
+<pre><span class="c"># describe it however roughly, then walk away</span>
+<span class="k">gauntlet</span> deliver --request-file gauntlet-request.md --host claude</pre>
+</header>
+
+<hr>
+
+<section>
+  <h2>The problem it solves</h2>
+  <p>A coding agent will tell you it is finished. It will sound confident. It may have run no tests, written a test that cannot fail, or fixed the symptom you described rather than the fault underneath.</p>
+  <p>If you can read the diff, you catch it. If you cannot — because you are the person who understands the <em>domain</em> rather than the code — you have no way to check, and "done" is just a word.</p>
+  <p>Agent Gauntlet exists so that the word means something specific.</p>
+</section>
+
+<section>
+  <h2>What "verified" actually guarantees</h2>
+  <p>Not a feeling. Five mechanical properties, enforced by the runtime rather than requested in a prompt:</p>
+  <ul class="guarantees">
+    <li><b>The agent that wrote the code did not approve it.</b> Criticism happens in a separate process that never sees the builder's reasoning — only the result.</li>
+    <li><b>Tests were executed by the runtime, never claimed by an agent.</b> Output is hashed and stored. An agent cannot report a pass that did not happen.</li>
+    <li><b>Pass and fail were defined before the work started.</b> Success comes from the compiled contract, not from an agent's judgment at the moment it is being judged.</li>
+    <li><b>Nothing touched your working tree until it was verified.</b> Every attempt happens in an isolated checkout; only verified commits are merged back.</li>
+    <li><b>It stopped on its own.</b> Repairs are capped. A run ends verified or blocked — it does not drift, and it does not need you watching.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>What you write, and what you get back</h2>
+  <p>You are not asked to write a specification. Deriving the acceptance criteria is the tool's job — asking you for them would defeat the point of having it.</p>
+  <div class="split">
+    <div>
+      <h4>You write</h4>
+      <p>What you want, in your own words. Who it is for. What evidence exists — a repo, a video, an article. What you have access to, and what you do not. What would make it a failure.</p>
+    </div>
+    <div>
+      <h4>It derives</h4>
+      <p>The architecture, the execution plan, and the tests. One sentence asking for a CSV-to-JSON tool produced 26 acceptance tests covering RFC 4180 quoting, CRLF and byte-order marks, ragged records, and a four-value exit-code contract.</p>
+    </div>
+  </div>
+  <p>The most valuable thing you can write is the last one, and it needs no technical vocabulary. <em>"It must never show me a stale price as if it were current"</em> is enough to derive a freshness check, a test that fabricates a stale feed, and an instruction to a critic to go looking for exactly that failure.</p>
+</section>
+
+<section>
+  <h2>How a run proceeds</h2>
+  <div class="flow">
+    <div class="step"><span class="n">1</span><span><b>Compile</b>Your request becomes an executable contract: objective, architecture with the evidence behind each decision, execution plan, and acceptance tests. The contract is fingerprinted and frozen.</span></div>
+    <div class="step"><span class="n">2</span><span><b>Build</b>Each slice of work gets a builder in its own isolated checkout, allowed to touch only the files that slice declares.</span></div>
+    <div class="step"><span class="n">3</span><span><b>Test</b>The runtime runs the declared commands itself and records exit codes, output hashes, and environment.</span></div>
+    <div class="step"><span class="n">4</span><span><b>Criticise</b>A fresh critic sees the result and the captured evidence — never the builder's explanation — and tries to find what is wrong.</span></div>
+    <div class="step"><span class="n">5</span><span><b>Repair</b>Failures return to a builder, up to three attempts. A defect owned by earlier work reopens that work instead of being patched over.</span></div>
+    <div class="step"><span class="n">6</span><span><b>Verify</b>A clean checkout containing only committed content is built and tested from scratch, more than once — which catches work that only passes because of something never committed.</span></div>
+    <div class="step"><span class="n">7</span><span><b>Explain</b>A Product Passport records what was built, why the architecture was chosen, how to run it, and precisely what the evidence proves.</span></div>
+  </div>
+</section>
+
+<section>
+  <h2>Judging quality, not only correctness</h2>
+  <p>A test can prove a program behaves. It cannot prove the result is any good. So a contract may name a <b>reference bar</b> — a real artifact the work has to beat — and the runtime stages the two side by side under neutral names.</p>
+  <p>Three independent judges see two files called A and B and a single question. They are not told which one is the candidate, and the runtime, not the panel, decides which is which and whether the votes reach the declared threshold. A split panel is inconclusive, and inconclusive is never approval.</p>
+</section>
+
+<section>
+  <h2>When it stops instead of finishing</h2>
+  <p>Sometimes the honest answer is that it cannot be done. A stopped run writes a plain-language account of why: what was attempted, what stopped it, what is recommended, what that would cost, and what happens if you do nothing.</p>
+  <p class="note">If a decision is genuinely yours — a credential, a budget, a legal call — you are asked for exactly that. If what remains is a technical judgment, the runtime <em>deletes the question</em> rather than passing the buck, and tells you plainly that no answer of yours can unblock it. Being asked to adjudicate a library choice you have no basis to evaluate is not help.</p>
+</section>
+
+<section>
+  <h2>Where it fits</h2>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Good fit</th><th>Poor fit</th></tr></thead>
+    <tbody>
+      <tr><td>A bounded new capability</td><td>A sweeping refactor</td></tr>
+      <tr><td>Adapting a reference to new data</td><td>A one-line change</td></tr>
+      <tr><td>Work worth half a day to two days</td><td>Anything you could review in ten minutes</td></tr>
+      <tr><td>Work you want audited later</td><td>Exploration where you want to steer</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>The enforcement costs real time — several minutes per slice, and more when a reference bar is being judged. That is worth paying when you cannot personally check the result, and wasteful when you can.</p>
+</section>
+
+<section>
+  <h2>Install</h2>
+<pre><span class="c"># the skills, so /compile-gauntlet works in any repository</span>
+git clone https://github.com/FrancyJGLisboa/agent-gauntlet-skills.git
+cd agent-gauntlet-skills &amp;&amp; bash scripts/install.sh claude
+
+<span class="c"># the runtime, which is what actually enforces anything</span>
+cd packages/gauntlet-cli &amp;&amp; npm install &amp;&amp; npm link</pre>
+  <p>Needs Node 24 or newer and an authenticated Claude Code, Codex, or GitHub Copilot CLI. The target project must be a Git repository with a clean working tree.</p>
+  <p class="note">Prompting inside your agent's chat writes the contract. The runtime has to be the thing that <em>executes</em> it — a single conversation cannot be both the builder and the independent critic, which is the guarantee you came for.</p>
+</section>
+
+<section>
+  <h2>Honest status</h2>
+  <p>This is early software, version 0.x, and the interesting parts are the guarantees rather than the polish. Worktree isolation, contract-defined pass conditions, and end-to-end runs from a one-line request have been exercised against live agents. Blind judging and clean-room verification are covered by tests but have not yet been run at scale.</p>
+  <p>The Codex and Copilot adapters are implemented and untested. Reported limitations in the Product Passport are deliberate: a claim with no evidence behind it does not appear there at all.</p>
+</section>
+
+<footer>
+  <a href="https://github.com/FrancyJGLisboa/agent-gauntlet-skills">Repository</a>
+  <a href="https://github.com/FrancyJGLisboa/agent-gauntlet-skills/blob/main/docs/architecture.md">Architecture</a>
+  <a href="https://github.com/FrancyJGLisboa/agent-gauntlet-skills/blob/main/docs/using-on-your-projects.md">Using it on your projects</a>
+  <p style="margin-top:1.5rem">MIT licensed.</p>
+</footer>
+
+</div>
+</body>
+</html>
