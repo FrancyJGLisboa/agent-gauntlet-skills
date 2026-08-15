@@ -43,7 +43,7 @@ Best compilation quality, deterministic execution.
 ```text
 cd ~/path/to/target-project
 claude
-/compile-gauntlet Port <reference> to <target>. Sources: <urls>. Outcome: <what "done" means>.
+/compile-gauntlet Port <reference> to <target>. Sources: <urls>. It must never <the failure you refuse to accept>.
 ```
 
 Then from the terminal, once `.gauntlet/` validates:
@@ -72,26 +72,39 @@ Invoke `/compile-gauntlet` with a delivery-shaped request ("build", "deliver", "
 
 ## Request template
 
-Save as `gauntlet-request.md` in the target repository:
+You are not expected to write a specification. `compile-gauntlet` treats whatever you write as noisy evidence of intent and derives the technical interpretation, the architecture, and the acceptance tests itself — that is the entire point of the compile step, and asking you for them would defeat it.
+
+The one-line request `Build a CLI that converts a CSV file to JSON with a --pretty flag` compiled into twenty-six acceptance tests covering RFC 4180 quoting, CRLF and BOM handling, ragged records, duplicate headers, and a four-value exit-code contract. None of that was in the request.
+
+So write what only you can know: what you want, what it is for, what evidence exists, and what you are not allowed to do. Save as `gauntlet-request.md` in the target repository:
 
 ```markdown
-# Goal
-<one sentence: what must exist and work when this is done>
+# What I want
+<in your own words, however rough — a metaphor is fine ("Waze for supply disruptions")>
 
-# Reference evidence
-<repo URLs, video URLs with timestamps, blog/paper links, screenshots — or "none">
+# Who it is for and what they do with it
+<the person, the decision or task it improves>
 
-# Target sources
-<APIs, datasets, files, credentials available — and which are explicitly NOT available>
+# Evidence that exists
+<repo URLs, videos with timestamps, articles, screenshots, a live product — or "none">
 
-# Constraints
-<language/runtime/deployment limits, licensing, files that must not change>
+# What I have access to
+<APIs, datasets, files, credentials — and, importantly, what is NOT available>
 
-# Definition of done
-<observable, executable checks: the exact commands that prove it works>
+# Hard constraints
+<must run offline, cannot use vendor X, licensing limits, files that must not change,
+ budget or deadline — write "none that I know of" if that is the truth>
+
+# What would make this a failure
+<the outcomes you would consider unacceptable, in plain language: wrong numbers
+ presented confidently, data leaving the building, silently stale results>
 ```
 
-The compiler treats this as noisy evidence, not a specification. Being vague about *how* is fine; being vague about *what proves it works* is what produces weak acceptance tests.
+That last section is the one that carries the most weight, and it needs no technical vocabulary. "It must never show me a stale price as if it were current" is a sentence any subject-matter expert can write, and it is enough for the compiler to derive a freshness assertion, a test that fabricates a stale feed, and a critic instruction to attempt exactly that failure.
+
+Leave a section empty rather than guessing. An honest gap becomes an uncertainty the compiler resolves with an experiment; a confident guess becomes a requirement built on sand.
+
+You review the result, not the plan: `.gauntlet/product-passport.md` states what was built and what the evidence proves. The compiler escalates to you only for credentials, spending, irreversible actions, legal decisions, or a genuine conflict of business values — never for a technical judgment.
 
 ## Reading results
 
