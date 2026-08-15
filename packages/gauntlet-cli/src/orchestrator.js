@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { cleanRoomPlan, criteriaFor, RunStore, validatePack } from './engine.js';
-import { JUDGE_SCHEMA, resolveAdapter } from './adapters.js';
+import { BLOCKER_SCHEMA, JUDGE_SCHEMA, resolveAdapter } from './adapters.js';
 import { WorkspaceManager } from './workspaces.js';
 
 export class GauntletError extends Error {
@@ -134,6 +134,55 @@ function passport(v,status,host) {
   fs.writeFileSync(path.join(v.root,'product-passport.md'),lines.join('\n'));
   return {json:path.join(v.root,'product-passport.json'),markdown:path.join(v.root,'product-passport.md')};
 }
+// A run that stops owes an explanation to whoever started it, and that person may not
+// read code. The runtime assembles the facts — it will not let an agent invent which
+// test failed — and an agent writes the human-facing judgment on top of them.
+function blockerFacts(store,v,error) {
+  const status=store.status();
+  const stuck=status.slices.filter(s=>!['verified'].includes(s.state));
+  const failing=[];
+  for(const slice of stuck) for(const t of testsFor(v,slice.id)){
+    const row=store.db.prepare('SELECT * FROM evidence WHERE slice_id=? AND test_id=? ORDER BY captured_at DESC LIMIT 1').get(slice.id,t.id);
+    if(row&&!row.satisfied) failing.push({slice:slice.id,test:t.id,exit_code:row.exit_code,unmet:JSON.parse(row.assertion_failures??'[]')});
+  }
+  const comparisons=store.db.prepare('SELECT slice_id,criterion_id,outcome FROM comparisons ORDER BY completed_at DESC LIMIT 10').all();
+  return {stopped_with:{code:error.code??'GAUNTLET_ERROR',message:error.message},objective:v.documents['objective.yaml'],
+    slices:status.slices,failing_tests:failing,comparisons,
+    attempts:status.events.filter(e=>['repairing','blocked','failed'].includes(e.to_state)).map(e=>({slice:e.slice_id,from:e.from_state,to:e.to_state,at:e.at,reason:e.reason}))};
+}
+function writeBlocker(v,facts,packet) {
+  const out={generated_at:new Date().toISOString(),...packet,facts};
+  fs.writeFileSync(path.join(v.root,'blocker.json'),`${dump(out)}\n`);
+  const ask=packet.human_dependency==='none'
+    ? ['No decision of yours can unblock this. It needs the pack recompiled or the code changed — not an answer from you.']
+    : [`**What is needed from you (${packet.human_dependency}):** ${packet.request_to_human}`];
+  fs.writeFileSync(path.join(v.root,'blocker.md'),[
+    '# Why this stopped','',`Generated: ${out.generated_at}`,`Classification: **${packet.classification}**`,'',
+    '## In plain terms','',packet.what_stopped_it,'','## What was attempted','',packet.what_was_attempted,'',
+    '## What we recommend','',packet.recommendation,'',`**Trade-off:** ${packet.tradeoff}`,'',`**If nobody decides anything:** ${packet.safe_default}`,'',
+    '## Your call','',...ask,'','## Evidence','',
+    ...(facts.failing_tests.length?['Tests that did not meet their declared expectations:','',...facts.failing_tests.map(f=>`- \`${f.test}\` (${f.slice}) exited ${f.exit_code}${f.unmet.length?` — ${f.unmet.join('; ')}`:''}`),'']:['No declared test was left failing.','']),
+    ...(facts.comparisons.length?['Blind comparisons against the reference bar:','',...facts.comparisons.map(c=>`- ${c.criterion_id} (${c.slice_id}): **${c.outcome}**`),'']:[]),
+    'Slice states:','',...facts.slices.map(s=>`- ${s.id}: **${s.state}** after ${s.repairs} repair attempts`),'',
+    `Machine-readable detail: \`${path.join(v.root,'blocker.json')}\``,''
+  ].join('\n'));
+  return {json:path.join(v.root,'blocker.json'),markdown:path.join(v.root,'blocker.md')};
+}
+function blockerPacket({store,v,agent,timeoutMs,error,onEvent}) {
+  const facts=blockerFacts(store,v,error);
+  const prompt=`A Gauntlet run has stopped and cannot continue. Explain it to the person who started it, who is a subject-matter expert and may not read code.\n\nEverything below was recorded by the runtime. Do not contradict it and do not invent evidence.\n\n${dump(facts)}\n\nClassify the failure, say plainly what stopped it and what had been attempted, recommend a course of action, state its cost, and say what happens if nobody does anything.\n\nA human may only be asked for credentials, access, spending, authority, a legal decision, or a conflict of business values. If what remains is a technical judgment — which library, which threshold, which design — that is not theirs to make: set human_dependency to "none" and leave request_to_human empty. Never ask them to decide whether the code is good.`;
+  let packet;
+  try{ packet=agent.invoke({role:'escalation',prompt,cwd:path.resolve(v.root,'..'),runtimeDir:path.join(v.root,'.runtime'),timeoutMs,schema:BLOCKER_SCHEMA}); }
+  catch(failure){
+    onEvent({type:'blocker.degraded',error:failure.message});
+    packet={classification:'PACK_DEFECT',what_was_attempted:'See the recorded attempts below.',what_stopped_it:error.message,
+      recommendation:'Read the recorded evidence; the run stopped before an explanation could be written.',tradeoff:'unknown',
+      safe_default:'Nothing changes until the recorded failure is addressed.',human_dependency:'none',request_to_human:''};
+  }
+  // The escalation rule is enforced here, not trusted to the prompt.
+  if(packet.human_dependency==='none') packet.request_to_human='';
+  return writeBlocker(v,facts,packet);
+}
 export function runGauntlet({manifest='.gauntlet/manifest.yaml',host='auto',adapter,maxTurns=100,timeoutMs=900000,onEvent=()=>{}}={}) {
   // Surface what each role actually returned. Diagnosing a routing field an agent
   // left empty is otherwise guesswork against prose in the transition log.
@@ -211,6 +260,11 @@ export function runGauntlet({manifest='.gauntlet/manifest.yaml',host='auto',adap
         if(pass)workspaces.integrate(current.id);continue;
       }
     }
+  }catch(error){
+    // Producing the explanation must never replace the failure it explains.
+    try{ error.details={...(error.details??{}),blocker:blockerPacket({store,v,agent,timeoutMs,error,onEvent})}; }
+    catch(secondary){ onEvent({type:'blocker.failed',error:secondary.message}); }
+    throw error;
   }finally{store.close();}
 }
 export function explainGauntlet(manifest='.gauntlet/manifest.yaml'){

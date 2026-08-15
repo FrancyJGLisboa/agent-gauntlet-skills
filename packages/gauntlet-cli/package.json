@@ -3,6 +3,13 @@
   "version": "0.5.0",
   "description": "Deterministic policy and state engine for Agent Gauntlet packs",
   "type": "module",
+  "author": "Francy Lisboa",
+  "license": "MIT",
+  "homepage": "https://github.com/FrancyJGLisboa/agent-gauntlet-skills#readme",
+  "bugs": { "url": "https://github.com/FrancyJGLisboa/agent-gauntlet-skills/issues" },
+  "repository": { "type": "git", "url": "git+https://github.com/FrancyJGLisboa/agent-gauntlet-skills.git", "directory": "packages/gauntlet-cli" },
+  "keywords": ["agent", "ai", "claude", "codex", "copilot", "verification", "builder-critic", "evidence", "orchestration"],
+  "publishConfig": { "access": "public" },
   "bin": {
     "gauntlet": "./src/cli.js"
   },
@@ -20,6 +27,5 @@
   },
   "engines": {
     "node": ">=24"
-  },
-  "license": "MIT"
+  }
 }

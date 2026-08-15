@@ -114,9 +114,13 @@ You review the result, not the plan: `.gauntlet/product-passport.md` states what
 | `gauntlet explain` | Regenerate `.gauntlet/product-passport.{md,json}` without running |
 | `gauntlet validate` | Structural check of the pack plus its fingerprint |
 
+When a run stops instead of finishing, read `.gauntlet/blocker.md` first. It states in plain language what stopped it, what was attempted, what we recommend, what that costs, and what happens if you do nothing — and whether anything is actually being asked of you. If it says no decision of yours can unblock it, that is the truth: the run needs the pack recompiled or the code changed, not an answer from you.
+
 `.gauntlet/product-passport.md` is the deliverable summary: what was built, architecture decisions, distribution instructions, proof, and known limitations. Claims not backed by CLI-captured evidence do not appear there.
 
-## When a run stops
+## Decoding a stop
+
+Every stop writes `.gauntlet/blocker.md` first; these are the underlying causes it will be explaining.
 
 - **`RUN_TERMINAL … is blocked`** — a critic or verifier found an external impossibility. Read the `reason` in the last event; it names the missing access, authority, or environment. Fix the cause and rerun; state persists.
 - **`HOST_NOT_FOUND`** — no authenticated agent CLI on `PATH`.

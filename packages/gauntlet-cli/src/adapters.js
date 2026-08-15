@@ -62,6 +62,20 @@ export function resolveAdapter(host='auto') {
   for(const name of ['codex','claude','copilot'])if(executable(name))return new choices[name]();
   throw new AdapterError('HOST_NOT_FOUND','No supported CLI found. Install and authenticate Codex, Claude Code, or Copilot CLI.');
 }
+// What a stopped run owes the person who started it. `human_dependency` is a closed
+// set on purpose: the escalation rule is that a human may be asked for authority,
+// access, money, or a value call, and never for a technical verdict. `none` means no
+// answer of theirs can unblock this.
+export const BLOCKER_SCHEMA={type:'object',additionalProperties:false,properties:{
+  classification:{type:'string',enum:['REPAIRABLE','STAGNANT','BLOCKED_ACCESS','BLOCKED_SEMANTICS','BLOCKED_AUTHORITY','PACK_DEFECT']},
+  what_was_attempted:{type:'string'},
+  what_stopped_it:{type:'string',description:'Plain language a subject-matter expert can read. No stack traces, no jargon.'},
+  recommendation:{type:'string'},
+  tradeoff:{type:'string',description:'What the recommendation costs, measured where possible.'},
+  safe_default:{type:'string',description:'What happens if nobody decides anything.'},
+  human_dependency:{type:'string',enum:['credentials','access','spending','authority','legal','value_conflict','none']},
+  request_to_human:{type:'string',description:'The single question to ask. Must be empty when human_dependency is none.'}
+},required:['classification','what_was_attempted','what_stopped_it','recommendation','tradeoff','safe_default','human_dependency','request_to_human']};
 // A judge reports only what it saw between two anonymous artifacts. It is never
 // told which is the candidate, and it has no field in which to declare consensus.
 export const JUDGE_SCHEMA={type:'object',additionalProperties:false,properties:{winner:{type:'string',enum:['A','B','tie']},decisive_difference:{type:'string'}},required:['winner','decisive_difference']};

@@ -75,7 +75,7 @@ Classify failure as `REPAIRABLE`, `STAGNANT`, `BLOCKED_ACCESS`, `BLOCKED_SEMANTI
 
 At the retry boundary, stop that slice and produce the declared blocker packet. Continue only with DAG branches that remain valid and independent. Do not silently weaken tests, tolerances, capabilities, or comparison bars to obtain a pass.
 
-For legitimate human escalation, present the compiled decision packet and safe default. Ask only for authority or missing access, never an unaided technical verdict.
+The runtime writes `.gauntlet/blocker.md` and `.gauntlet/blocker.json` on every stop, assembling the evidence itself and having a fresh escalation agent explain it. Do not restate it as a wall of technical detail. `human_dependency` is a closed set — credentials, access, spending, authority, legal, value_conflict, or none — and when it is `none` the runtime blanks any question the agent tried to ask, because a technical dead end is not the user's decision to make.
 
 ### 6. Run final verification
 

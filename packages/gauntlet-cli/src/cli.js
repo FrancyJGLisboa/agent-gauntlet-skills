@@ -58,4 +58,9 @@ try {
       print({ready,artifacts:d.artifacts,fingerprint:v.fingerprint}); process.exit(ready?0:1);
     } else { usage(); process.exit(2); }
   } finally { store.close(); }
-} catch(error) { console.error(JSON.stringify({error:{code:error.code??'GAUNTLET_ERROR',message:error.message,details:error.details??{}}},null,2)); process.exit(1); }
+} catch(error) {
+  const blocker=error.details?.blocker;
+  if(blocker) console.error(`\nThe run stopped. Why, in plain language: ${blocker.markdown}\n`);
+  console.error(JSON.stringify({error:{code:error.code??'GAUNTLET_ERROR',message:error.message,details:error.details??{}}},null,2));
+  process.exit(1);
+}

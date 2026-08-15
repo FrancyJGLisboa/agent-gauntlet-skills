@@ -102,11 +102,20 @@ A builder that writes outside its slice's `builder.scope` does not integrate and
 
 Interrupted `building` is resumable: the database retains the state and workspace metadata, and the next invocation dispatches a fresh builder into the existing worktree.
 
+## When a run stops
+
+Every stop writes `.gauntlet/blocker.md` and `.gauntlet/blocker.json` before the error propagates, because `Repair limit exceeded (3)` is not an explanation to hand a subject-matter expert.
+
+The runtime assembles the facts — slice states, repair counts, which declared tests were left unsatisfied and which assertion each missed, comparison outcomes, and the full attempt history — so an agent cannot misreport what happened. A fresh read-only escalation agent then writes the human-facing judgment on top of them: classification, what was attempted, what stopped it in plain language, a recommendation, its trade-off, and what happens if nobody acts.
+
+`human_dependency` is a closed set — `credentials`, `access`, `spending`, `authority`, `legal`, `value_conflict`, `none` — which is how the escalation rule stops being prose. A human may be asked for authority, access, money, or a value call. When what remains is a technical judgment the dependency is `none`, and the runtime blanks the question rather than printing it: the reader is told plainly that no decision of theirs can unblock the run. If the escalation agent itself fails, the recorded facts are still written without the narrative.
+
 ## Persistent artifacts
 
 - `.gauntlet/run-state.sqlite`: transactional state, assignments, evidence index, events, and workspace metadata.
 - `.gauntlet/runs/`: CLI-captured evidence artifacts.
-- `.gauntlet/product-passport.md`: subject-matter explanation.
+- `.gauntlet/product-passport.md`: subject-matter explanation of a completed run.
+- `.gauntlet/blocker.md` and `.gauntlet/blocker.json`: why a stopped run stopped, and what — if anything — is being asked of the human.
 - `.gauntlet/product-passport.json`: machine-readable explanation and proof index.
 - Temporary `agent-gauntlet-*` Git worktrees: isolated builder attempts, removed after verified integration.
 

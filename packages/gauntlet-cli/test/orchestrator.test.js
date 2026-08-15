@@ -298,3 +298,63 @@ test('declared setup steps prepare the clean room before the tests run', () => {
   assert.equal(result.completed,true,'setup output is available to the tests in the same room');
   assert.ok(events.filter(e=>e.type==='clean_room').every(e=>e.satisfied));
 });
+
+const blockerAdapter=(packet)=>({name:'mock',invoke(input){
+  if(input.role==='escalation')return packet;
+  if(input.role==='builder')return ok('builder');
+  return {verdict:'repair',summary:'gap',reason:'not good enough',largest_gap:'gap',changed_files:[],blocking_slice:''};
+}});
+const PACKET={classification:'BLOCKED_ACCESS',what_was_attempted:'Three builders tried to reach the price feed.',
+  what_stopped_it:'The price feed needs a login we do not have, so no version of this can show real prices.',
+  recommendation:'Provide a read-only API key, or accept a version that runs on the sample file only.',
+  tradeoff:'The sample-file version cannot be trusted for live decisions.',
+  safe_default:'Nothing ships; the existing manual process continues.',
+  human_dependency:'credentials',request_to_human:'Can you supply a read-only API key for the price feed?'};
+
+test('a stopped run writes an explanation a non-coder can read', () => {
+  const root=project();
+  assert.throws(()=>runGauntlet({manifest:path.join(root,'.gauntlet/manifest.yaml'),adapter:blockerAdapter(PACKET)}),/Repair limit exceeded/);
+  const markdown=fs.readFileSync(path.join(root,'.gauntlet/blocker.md'),'utf8');
+  assert.match(markdown,/needs a login we do not have/,'the plain-language cause leads');
+  assert.match(markdown,/What is needed from you \(credentials\)/);
+  assert.match(markdown,/If nobody decides anything:/,'a safe default is always stated');
+  assert.match(markdown,/core: \*\*\w+\*\* after 3 repair attempts/,'the runtime supplies the slice history');
+  assert.ok(!/Error:|at Object\.|\.js:\d+:\d+/.test(markdown),'no stack traces reach the reader');
+  const json=JSON.parse(fs.readFileSync(path.join(root,'.gauntlet/blocker.json'),'utf8'));
+  assert.equal(json.classification,'BLOCKED_ACCESS');
+  assert.equal(json.facts.stopped_with.message,'Repair limit exceeded (3)');
+});
+
+test('the evidence in a blocker comes from the runtime, not the agent', () => {
+  const root=project();
+  const lying={...PACKET,what_was_attempted:'Everything passed on the first try.'};
+  assert.throws(()=>runGauntlet({manifest:path.join(root,'.gauntlet/manifest.yaml'),adapter:blockerAdapter(lying)}),/Repair limit exceeded/);
+  const json=JSON.parse(fs.readFileSync(path.join(root,'.gauntlet/blocker.json'),'utf8'));
+  assert.ok(json.facts.attempts.length>=3,'the recorded attempts contradict the claim');
+  assert.ok(json.facts.slices.some(s=>s.repairs===3));
+  assert.match(fs.readFileSync(path.join(root,'.gauntlet/blocker.md'),'utf8'),/after 3 repair attempts/);
+});
+
+test('a technical dead end is never dressed up as a question for the human', () => {
+  const root=project();
+  // The agent tries to hand a technical judgment back to the user anyway.
+  const overreach={...PACKET,classification:'PACK_DEFECT',human_dependency:'none',
+    request_to_human:'Which JSON library should we use, and is 200ms an acceptable p95?'};
+  assert.throws(()=>runGauntlet({manifest:path.join(root,'.gauntlet/manifest.yaml'),adapter:blockerAdapter(overreach)}),/Repair limit exceeded/);
+  const markdown=fs.readFileSync(path.join(root,'.gauntlet/blocker.md'),'utf8');
+  assert.ok(!markdown.includes('Which JSON library'),'the question is stripped, not printed');
+  assert.match(markdown,/No decision of yours can unblock this/);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(root,'.gauntlet/blocker.json'),'utf8')).request_to_human,'');
+});
+
+test('an escalation agent that dies still leaves an explanation behind', () => {
+  const root=project(); const events=[];
+  const adapter={name:'mock',invoke(input){
+    if(input.role==='escalation')throw new Error('escalation process died');
+    if(input.role==='builder')return ok('builder');
+    return {verdict:'repair',summary:'gap',reason:'not good enough',largest_gap:'gap',changed_files:[],blocking_slice:''};
+  }};
+  assert.throws(()=>runGauntlet({manifest:path.join(root,'.gauntlet/manifest.yaml'),adapter,onEvent:e=>events.push(e)}),/Repair limit exceeded/);
+  assert.ok(events.some(e=>e.type==='blocker.degraded'));
+  assert.match(fs.readFileSync(path.join(root,'.gauntlet/blocker.md'),'utf8'),/Repair limit exceeded/,'the recorded facts survive without the narrative');
+});
