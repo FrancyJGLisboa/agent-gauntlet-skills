@@ -79,7 +79,7 @@ For legitimate human escalation, present the compiled decision packet and safe d
 
 ### 6. Run final verification
 
-After all required slices pass, execute the clean-room procedure from `final-verification.yaml` twice unless the pack specifies a stronger rule. Verify from a clean checkout/environment, rebuild generated artifacts, run end-to-end tests, check provenance, and confirm no critical unresolved uncertainty remains.
+When `final-verification.yaml` declares `clean_room: true`, the runtime performs it: for each declared run it creates a detached checkout of the slice's committed head, executes the declared `setup` argv steps, runs the acceptance tests there, and removes the room. Do not assemble a clean room by hand or re-run the tests in the builder's worktree and call it clean — a worktree still holds uncommitted files, dependencies, and caches, which is precisely what the procedure exists to exclude. Your job is to read the clean-room summary you are given and attempt to falsify it: check provenance, rebuild expectations, and confirm no critical unresolved uncertainty remains.
 
 Assign a final fresh-context critic to validate the evidence chain and attempt to falsify completion. Completion requires both the formal stop policy and final critic to pass.
 

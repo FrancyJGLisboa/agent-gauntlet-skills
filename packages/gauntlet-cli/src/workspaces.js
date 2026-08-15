@@ -28,6 +28,18 @@ export class WorkspaceManager {
     this.store.setMeta(this.key(id,'dir'),dir);this.store.setMeta(this.key(id,'base'),base);this.store.setMeta(this.key(id,'branch'),branch);
     return {dir,base,branch};
   }
+  // A detached checkout of the slice's committed head. It holds exactly what an
+  // outsider would receive — no untracked builder scratch, no installed dependencies,
+  // no caches — which is the only sense in which "clean room" is checkable.
+  cleanRoom(id){
+    const workspace=this.get(id);
+    if(!workspace)throw failure('CLEAN_ROOM_UNAVAILABLE','No workspace exists for this slice',{slice:id});
+    const commit=git(['rev-parse','HEAD'],workspace.dir).stdout.trim();
+    const dir=path.join(os.tmpdir(),`agent-gauntlet-cleanroom-${safe(id)}-${crypto.randomBytes(5).toString('hex')}`);
+    git(['worktree','add','--detach',dir,commit],this.repo);
+    return {dir,commit};
+  }
+  removeCleanRoom(room){ if(room?.dir&&fs.existsSync(room.dir)) git(['worktree','remove','--force',room.dir],this.repo,{allowFailure:true}); }
   changed(workspace){return git(['status','--porcelain'],workspace.dir).stdout.trimEnd().split('\n').filter(Boolean).map(l=>l.slice(3).trim());}
   assertScope(workspace,spec){
     const changed=this.changed(workspace),scope=Array.isArray(spec.builder?.scope)?spec.builder.scope:[];

@@ -52,7 +52,7 @@ See [docs/using-on-your-projects.md](docs/using-on-your-projects.md) for driving
 4. Builder changes must remain inside the slice's declared `builder.scope`.
 5. The CLI—not an agent—executes declared acceptance commands and records evidence.
 6. Only CLI-captured, fingerprint-matching evidence that satisfies the test's declared assertions may support `passed` or `verified`. Success is defined by the pack, not by a hard-coded exit code, so a negative test may declare a non-zero exit; a test declaring no assertions still means exit code zero.
-7. Only final-verified worktree commits may be integrated into the target branch.
+7. Only final-verified worktree commits may be integrated into the target branch. A declared clean room is performed by the runtime as repeated detached checkouts of committed content; a re-run inside the builder's worktree is not a clean room.
 8. Repair loops remain bounded to three or fewer attempts per slice.
 9. Proxies, unknowns, unavailable mappings, and speculative claims must never be presented as equivalent or proven.
 10. Qualitative criteria are judged blind against a declared reference bar. The runtime — never an agent — generates the candidate, assigns the A/B labels, and computes agreement; a split or incomplete panel is `INCONCLUSIVE`, which is not approval.

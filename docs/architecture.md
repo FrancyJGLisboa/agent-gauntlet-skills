@@ -26,7 +26,7 @@ flowchart TD
 | Testing | Nothing about recorded outcomes | Command argv, cwd boundary, timeout, hashes, artifacts, declared assertions |
 | Criticism | Semantic pass/repair judgment | Fresh process, read-only permissions, evidence ownership |
 | Qualitative judging | Which of two anonymous artifacts is better, and why | Candidate generation, A/B label assignment, neutral staging, panel size, quorum arithmetic |
-| Verification | Falsification and final judgment | Successful independent evidence and legal transition |
+| Verification | Falsification and final judgment | Clean-room checkouts, repeated runs, reproducibility, legal transition |
 | Integration | Nothing | Verified state, unchanged base commit, cherry-pick |
 | Release | Artifact preparation | External HMAC authority |
 
@@ -51,6 +51,24 @@ stateDiagram-v2
     critiquing --> blocked
     final_verification --> blocked
 ```
+
+## Clean-room final verification
+
+`final-verification.yaml` may declare a clean room, which the runtime performs rather than describes:
+
+```yaml
+clean_room: true
+runs: 2                       # at least two; one run proves nothing about reproducibility
+require_identical_output: false
+setup:                        # argv arrays, run once per room before the tests
+  - ["npm", "ci"]
+```
+
+For each run the runtime creates a detached worktree at the slice's committed head — containing only committed content, with no untracked builder scratch, no installed dependencies, and no caches — executes the declared setup steps there, then runs the acceptance tests and records the evidence. The room is removed afterwards.
+
+This catches the failure a same-worktree re-run cannot: work that passes only because of something never committed. When `require_identical_output` is set, runs must also agree byte for byte, so nondeterminism is a finding even when every run passes. A slice reaches `verified` only if every run satisfied its assertions and the runs agreed; otherwise the summary naming the failure goes back to the builder.
+
+A pack that omits `clean_room: true` keeps the previous behaviour — one run in the existing worktree — and the verifier is told which of the two it got.
 
 ## Judging quality, not only correctness
 

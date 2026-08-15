@@ -235,3 +235,66 @@ test('a judge that fails to answer is not counted as agreement', () => {
   assert.ok(events.some(e=>e.type==='judge.failed'),'the failure is recorded');
   assert.ok(events.filter(e=>e.type==='comparison').some(e=>e.outcome==='inconclusive'),'a missing vote cannot complete a quorum');
 });
+
+// A pack whose single slice passes only because of a file that was never committed.
+function cleanRoomProject({finalVerification,command}){
+  const root=project();
+  fs.writeFileSync(path.join(root,'.gitignore'),'never-committed.txt\n');
+  fs.writeFileSync(path.join(root,'.gauntlet','final-verification.yaml'),finalVerification);
+  fs.writeFileSync(path.join(root,'.gauntlet','execution-dag.yaml'),
+    `slices:\n  - id: core\n    depends_on: []\n    builder: { scope: [src/market.js] }\n    critic: { independent: true }\n    acceptance_tests: [unit-test]\n`);
+  fs.writeFileSync(path.join(root,'.gauntlet','acceptance-tests.yaml'),
+    `tests:\n  - id: unit-test\n    slice_id: core\n    cwd: ..\n    command: ${JSON.stringify(command)}\n`);
+  spawnSync('git',['add','-A'],{cwd:root});spawnSync('git',['-c','user.name=T','-c','user.email=t@e.test','commit','-qm','cleanroom'],{cwd:root});
+  return root;
+}
+
+test('the clean room contains only committed content, so uncommitted crutches fail it', () => {
+  const root=cleanRoomProject({finalVerification:'clean_room: true\nruns: 2\n',
+    command:['node','-e','import("node:fs").then(fs=>process.exit(fs.existsSync("never-committed.txt")?0:1))']});
+  const events=[];
+  const adapter={name:'mock',invoke(input){
+    // The builder leaves a gitignored file behind: the tests pass in its own worktree.
+    if(input.role==='builder')fs.writeFileSync(path.join(input.cwd,'never-committed.txt'),'crutch');
+    return ok(input.role);
+  }};
+  assert.throws(()=>runGauntlet({manifest:path.join(root,'.gauntlet/manifest.yaml'),adapter,onEvent:e=>events.push(e)}),/Repair limit exceeded/);
+  const rooms=events.filter(e=>e.type==='clean_room');
+  assert.ok(rooms.length>=2,'both declared runs happened');
+  assert.ok(rooms.every(e=>e.satisfied===false),'the checkout without the crutch fails');
+});
+
+test('a clean room runs the declared number of times and reports its commit', () => {
+  const root=cleanRoomProject({finalVerification:'clean_room: true\nruns: 3\n',
+    command:['node','-e','console.log("PASS")']});
+  const events=[];
+  const result=runGauntlet({manifest:path.join(root,'.gauntlet/manifest.yaml'),adapter:{name:'mock',invoke:i=>ok(i.role)},onEvent:e=>events.push(e)});
+  assert.equal(result.completed,true);
+  const rooms=events.filter(e=>e.type==='clean_room');
+  assert.equal(rooms.length,3);
+  assert.ok(rooms.every(e=>e.satisfied&&/^[0-9a-f]{40}$/.test(e.commit)),'each run names the commit it verified');
+  assert.equal(new Set(rooms.map(e=>e.commit)).size,1,'every run verifies the same commit');
+});
+
+test('runs that disagree are not reproducible even when both pass', () => {
+  const root=cleanRoomProject({finalVerification:'clean_room: true\nruns: 2\nrequire_identical_output: true\n',
+    command:['node','-e','console.log(process.hrtime.bigint())']});
+  const events=[];
+  assert.throws(()=>runGauntlet({manifest:path.join(root,'.gauntlet/manifest.yaml'),adapter:{name:'mock',invoke:i=>ok(i.role)},onEvent:e=>events.push(e)}),/Repair limit exceeded/);
+  assert.ok(events.filter(e=>e.type==='clean_room').every(e=>e.satisfied),'each run passed on its own');
+});
+
+test('declared setup steps prepare the clean room before the tests run', () => {
+  // The gitignored file exists in the builder's worktree and never in a fresh
+  // checkout, so this run can only reach `verified` if setup recreated it.
+  const root=cleanRoomProject({finalVerification:`clean_room: true\nruns: 2\nsetup:\n  - ["node", "-e", "import('node:fs').then(fs=>fs.writeFileSync('never-committed.txt','rebuilt'))"]\n`,
+    command:['node','-e','import("node:fs").then(fs=>process.exit(fs.existsSync("never-committed.txt")?0:1))']});
+  const events=[];
+  const adapter={name:'mock',invoke(input){
+    if(input.role==='builder')fs.writeFileSync(path.join(input.cwd,'never-committed.txt'),'crutch');
+    return ok(input.role);
+  }};
+  const result=runGauntlet({manifest:path.join(root,'.gauntlet/manifest.yaml'),adapter,onEvent:e=>events.push(e)});
+  assert.equal(result.completed,true,'setup output is available to the tests in the same room');
+  assert.ok(events.filter(e=>e.type==='clean_room').every(e=>e.satisfied));
+});

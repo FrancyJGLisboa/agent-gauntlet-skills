@@ -265,3 +265,11 @@ test('a threshold that silently demands unanimity is reported as a warning', () 
   const relaxed = validatePack(pack({ 'critic-protocol.yaml': `qualitative:\n  judges: 3\n  agreement: 0.66\n  criteria:\n    - id: polish\n      slice_id: core\n      question: Which looks better?\n      candidate: ["node", "shot.js"]\n      artifact: out/a.png\n      reference: ref/bar.png\n` }).manifest);
   assert.deepEqual(relaxed.warnings, [], 'a threshold one dissent can survive warns about nothing');
 });
+
+test('a declared clean room must be reproducible and scripted with argv arrays', () => {
+  const codes = doc => validatePack(pack({ 'final-verification.yaml': doc }).manifest).errors.map(e => e.code);
+  assert.deepEqual(codes('clean_room: true\n'), [], 'runs defaults to two');
+  assert.deepEqual(codes('clean_room: false\nruns: 1\n'), [], 'a pack that claims no clean room is not held to one');
+  assert.ok(codes('clean_room: true\nruns: 1\n').includes('CLEAN_ROOM_RUNS'), 'a single run proves nothing about reproducibility');
+  assert.ok(codes('clean_room: true\nsetup:\n  - "npm ci && npm run build"\n').includes('CLEAN_ROOM_SETUP'), 'a shell string is not an argv array');
+});

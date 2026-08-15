@@ -136,6 +136,22 @@ function validateCriticProtocol(documents, file, errors, warnings) {
   }
 }
 
+// `clean_room: true` used to be decorative. These are the parts of it a runtime can
+// actually perform: a checkout containing only committed content, prepared by declared
+// commands, exercised more than once.
+export function cleanRoomPlan(validation) {
+  const doc = validation.documents?.['final-verification.yaml'] ?? {};
+  return { enabled: doc.clean_room === true, runs: Number.isInteger(doc.runs) ? doc.runs : 2,
+    setup: asArray(doc.setup), requireIdenticalOutput: doc.require_identical_output === true };
+}
+function validateFinalVerification(doc, file, errors) {
+  if (doc?.clean_room !== true) return;
+  if ('runs' in doc && (!Number.isInteger(doc.runs) || doc.runs < 2)) errors.push(issue('CLEAN_ROOM_RUNS', 'A clean room must be exercised at least twice; one run proves nothing about reproducibility', file, 'runs'));
+  for (const [i, command] of asArray(doc.setup).entries()) {
+    if (!Array.isArray(command) || !command.length || command.some(v => typeof v !== 'string')) errors.push(issue('CLEAN_ROOM_SETUP', 'Clean-room setup steps must be argv arrays; shell strings are prohibited', file, `setup[${i}]`));
+  }
+}
+
 function validateArchitecture(doc, file, errors) {
   const decisions = asArray(doc?.decisions ?? doc?.components ?? doc);
   if (!decisions.length) return errors.push(issue('ARCHITECTURE_EMPTY', 'At least one architecture decision is required', file));
@@ -285,6 +301,7 @@ export function validatePack(manifestPath = '.gauntlet/manifest.yaml') {
   if (documents['semantic-mappings.yaml']) validateMappings(documents['semantic-mappings.yaml'], 'semantic-mappings.yaml', errors);
   if (documents['execution-dag.yaml']) validateDag(documents['execution-dag.yaml'], 'execution-dag.yaml', errors);
   if (documents['critic-protocol.yaml']) validateCriticProtocol(documents, 'critic-protocol.yaml', errors, warnings);
+  if (documents['final-verification.yaml']) validateFinalVerification(documents['final-verification.yaml'], 'final-verification.yaml', errors);
   if(reconstructionEnabled) validateReconstruction(documents,errors);
   const stop = documents['stop-policy.yaml'];
   if (stop && (stop.retry?.maximum_repairs_per_slice ?? 4) > 3) errors.push(issue('REPAIR_LIMIT', 'Stop policy repair limit cannot exceed 3', 'stop-policy.yaml', 'retry.maximum_repairs_per_slice'));
