@@ -358,3 +358,41 @@ test('an escalation agent that dies still leaves an explanation behind', () => {
   assert.ok(events.some(e=>e.type==='blocker.degraded'));
   assert.match(fs.readFileSync(path.join(root,'.gauntlet/blocker.md'),'utf8'),/Repair limit exceeded/,'the recorded facts survive without the narrative');
 });
+
+test('creating the scoped file in a new directory is not a scope violation', () => {
+  const root=project();
+  // src/ exists in the fixture; use a directory that does not, which is what makes
+  // git collapse the untracked entry to "fresh/" and hide the real filename.
+  fs.writeFileSync(path.join(root,'.gauntlet','execution-dag.yaml'),
+    `slices:\n  - id: core\n    depends_on: []\n    builder: { scope: [fresh/thing.js] }\n    critic: { independent: true }\n    acceptance_tests: [unit-test]\n`);
+  fs.writeFileSync(path.join(root,'.gauntlet','acceptance-tests.yaml'),
+    `tests:\n  - id: unit-test\n    slice_id: core\n    cwd: ..\n    command: ["node","-e","import('node:fs').then(fs=>process.exit(fs.existsSync('fresh/thing.js')?0:1))"]\n`);
+  spawnSync('git',['add','-A'],{cwd:root});
+  spawnSync('git',['-c','user.name=T','-c','user.email=t@e.test','commit','-qm','scoped'],{cwd:root});
+  const adapter={name:'mock',invoke(input){
+    if(input.role==='builder'){fs.mkdirSync(path.join(input.cwd,'fresh'),{recursive:true});fs.writeFileSync(path.join(input.cwd,'fresh/thing.js'),'export const a=1;\n');}
+    return ok(input.role);
+  }};
+  const result=runGauntlet({manifest:path.join(root,'.gauntlet/manifest.yaml'),adapter});
+  assert.equal(result.completed,true,'the builder wrote exactly its declared scope');
+  assert.equal(result.status.slices.find(s=>s.id==='core').repairs,0,'and was not charged a repair for it');
+  assert.ok(fs.existsSync(path.join(root,'fresh/thing.js')),'the work integrated');
+});
+
+test('a critic that writes into the worktree is caught', () => {
+  const root=project();
+  // The scope is the directory itself, so the builder's file is legitimate and the
+  // critic's sibling is the only mutation.
+  fs.writeFileSync(path.join(root,'.gauntlet','execution-dag.yaml'),
+    `slices:\n  - id: core\n    depends_on: []\n    builder: { scope: [scratch/] }\n    critic: { independent: true }\n    acceptance_tests: [unit-test]\n`);
+  fs.writeFileSync(path.join(root,'.gauntlet','acceptance-tests.yaml'),
+    `tests:\n  - id: unit-test\n    slice_id: core\n    cwd: ..\n    command: ["node","-e","import('node:fs').then(fs=>process.exit(fs.existsSync('scratch/a.txt')?0:1))"]\n`);
+  spawnSync('git',['add','-A'],{cwd:root});
+  spawnSync('git',['-c','user.name=T','-c','user.email=t@e.test','commit','-qm','scoped'],{cwd:root});
+  const adapter={name:'mock',invoke(input){
+    if(input.role==='builder'){fs.mkdirSync(path.join(input.cwd,'scratch'),{recursive:true});fs.writeFileSync(path.join(input.cwd,'scratch/a.txt'),'from builder');}
+    if(input.role==='critic')fs.writeFileSync(path.join(input.cwd,'scratch/smuggled.txt'),'from critic');
+    return ok(input.role);
+  }};
+  assert.throws(()=>runGauntlet({manifest:path.join(root,'.gauntlet/manifest.yaml'),adapter}),e=>e.code==='CRITIC_MUTATION');
+});

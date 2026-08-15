@@ -40,7 +40,12 @@ export class WorkspaceManager {
     return {dir,commit};
   }
   removeCleanRoom(room){ if(room?.dir&&fs.existsSync(room.dir)) git(['worktree','remove','--force',room.dir],this.repo,{allowFailure:true}); }
-  changed(workspace){return git(['status','--porcelain'],workspace.dir).stdout.trimEnd().split('\n').filter(Boolean).map(l=>l.slice(3).trim());}
+  // --untracked-files=all is load-bearing twice over. Without it git collapses a new
+  // untracked directory to "src/", so a builder that creates exactly the file its
+  // scope declares is reported as working outside it; and a read-only agent could
+  // add a file inside an already-untracked directory without changing the output at
+  // all, which would pass the mutation check.
+  changed(workspace){return git(['status','--porcelain','--untracked-files=all'],workspace.dir).stdout.trimEnd().split('\n').filter(Boolean).map(l=>l.slice(3).trim());}
   assertScope(workspace,spec){
     const changed=this.changed(workspace),scope=Array.isArray(spec.builder?.scope)?spec.builder.scope:[];
     if(!scope.length||!changed.length)return changed;
@@ -65,8 +70,8 @@ export class WorkspaceManager {
     git(['add','--all'],workspace.dir);git(['-c','user.name=Agent Gauntlet','-c','user.email=gauntlet@local','commit','-m',`gauntlet(${spec.id}): builder checkpoint`],workspace.dir);
     return git(['rev-parse','HEAD'],workspace.dir).stdout.trim();
   }
-  assertReadOnly(workspace,before){const after=git(['status','--porcelain'],workspace.dir).stdout;if(after!==before)throw failure('CRITIC_MUTATION','Read-only agent modified the isolated workspace');}
-  snapshot(workspace){return git(['status','--porcelain'],workspace.dir).stdout;}
+  assertReadOnly(workspace,before){const after=git(['status','--porcelain','--untracked-files=all'],workspace.dir).stdout;if(after!==before)throw failure('CRITIC_MUTATION','Read-only agent modified the isolated workspace');}
+  snapshot(workspace){return git(['status','--porcelain','--untracked-files=all'],workspace.dir).stdout;}
   integrate(id){
     const workspace=this.get(id);if(!workspace)return;
     const current=git(['rev-parse','HEAD'],this.repo).stdout.trim();
