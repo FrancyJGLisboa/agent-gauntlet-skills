@@ -6,14 +6,36 @@
   "author": "Francy Lisboa",
   "license": "MIT",
   "homepage": "https://github.com/FrancyJGLisboa/agent-gauntlet-skills#readme",
-  "bugs": { "url": "https://github.com/FrancyJGLisboa/agent-gauntlet-skills/issues" },
-  "repository": { "type": "git", "url": "git+https://github.com/FrancyJGLisboa/agent-gauntlet-skills.git", "directory": "packages/gauntlet-cli" },
-  "keywords": ["agent", "ai", "claude", "codex", "copilot", "verification", "builder-critic", "evidence", "orchestration"],
-  "publishConfig": { "access": "public" },
-  "bin": {
-    "gauntlet": "./src/cli.js"
+  "bugs": {
+    "url": "https://github.com/FrancyJGLisboa/agent-gauntlet-skills/issues"
   },
-  "files": ["src", "schemas", "README.md"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FrancyJGLisboa/agent-gauntlet-skills.git",
+    "directory": "packages/gauntlet-cli"
+  },
+  "keywords": [
+    "agent",
+    "ai",
+    "claude",
+    "codex",
+    "copilot",
+    "verification",
+    "builder-critic",
+    "evidence",
+    "orchestration"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "bin": {
+    "gauntlet": "src/cli.js"
+  },
+  "files": [
+    "src",
+    "schemas",
+    "README.md"
+  ],
   "scripts": {
     "test": "node --test",
     "test:conformance": "node --test test/engine.test.js",
