@@ -140,7 +140,7 @@
   <h1>Agents can write the code. This makes them prove it works.</h1>
   <p class="lede">Ask for what you want in your own words. Independent agents build it, try to tear it down, and repair what breaks — while a deterministic runtime, not the agents, decides what counts as done. <strong>You get a verdict, not a claim.</strong></p>
 <pre><span class="c"># describe it however roughly, then walk away</span>
-<span class="k">gauntlet</span> deliver --request-file gauntlet-request.md --host claude</pre>
+<span class="k">npx</span> @promptcompletion/cli deliver --request-file gauntlet-request.md --host claude</pre>
 </header>
 
 <hr>
@@ -223,12 +223,12 @@
 
 <section>
   <h2>Install</h2>
-<pre><span class="c"># the skills, so /compile-gauntlet works in any repository</span>
-git clone https://github.com/FrancyJGLisboa/agent-gauntlet-skills.git
-cd agent-gauntlet-skills &amp;&amp; bash scripts/install.sh claude
+<pre><span class="c"># the runtime needs no install — npx fetches it</span>
+<span class="k">npx</span> @promptcompletion/cli run --host auto
 
-<span class="c"># the runtime, which is what actually enforces anything</span>
-cd packages/gauntlet-cli &amp;&amp; npm install &amp;&amp; npm link</pre>
+<span class="c"># the skills, so /compile-gauntlet works inside any repository</span>
+git clone https://github.com/FrancyJGLisboa/agent-gauntlet-skills.git
+cd agent-gauntlet-skills &amp;&amp; bash scripts/install.sh claude</pre>
   <p>Needs Node 24 or newer and an authenticated Claude Code, Codex, or GitHub Copilot CLI. The target project must be a Git repository with a clean working tree.</p>
   <p class="note">Prompting inside your agent's chat writes the contract. The runtime has to be the thing that <em>executes</em> it — a single conversation cannot be both the builder and the independent critic, which is the guarantee you came for.</p>
 </section>

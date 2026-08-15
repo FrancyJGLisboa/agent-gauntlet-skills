@@ -16,7 +16,7 @@ cd packages/gauntlet-cli && npm install && npm link
 gauntlet --help
 ```
 
-`install.sh` symlinks by default and `npm link` symlinks the package, so `git pull` updates both. The npm registry form `npx @promptcompletion/cli` does not work yet — the package is unpublished.
+`install.sh` symlinks by default and `npm link` symlinks the package, so `git pull` updates both. Step 2 is optional: `npx @promptcompletion/cli` runs the published CLI without installing anything. Link the clone when you want the runtime you are editing rather than the released one.
 
 ## Preconditions for a target project
 

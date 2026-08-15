@@ -27,7 +27,7 @@ Run this once from the target repository and let it reach a terminal state:
 node packages/gauntlet-cli/src/cli.js run --host auto --manifest .gauntlet/manifest.yaml
 ```
 
-If the CLI is installed globally from a clone (`npm link` inside `packages/gauntlet-cli`), use `gauntlet run --host auto` from the target repository. The registry form `npx @promptcompletion/cli run --host auto` works only once the package is published. Pin `--host codex`, `claude`, or `copilot` only when requested or auto-detection cannot disambiguate.
+Prefer `npx @promptcompletion/cli run --host auto` from the target repository, which needs no prior installation. When the CLI is linked from a clone, `gauntlet run --host auto` runs that working copy instead. Pin `--host codex`, `claude`, or `copilot` only when requested or auto-detection cannot disambiguate.
 
 The driver launches a new non-resumed host process for every builder, critic, and verifier turn; keeps capability tokens outside agent prompts; runs declared commands itself; dispatches repair and blocker states; enforces bounds; and writes the Product Passport. Stay attached until it exits. Use the manual workflow only to diagnose or recover a structured driver failure.
 

@@ -22,7 +22,7 @@ npx @promptcompletion/cli run --host auto
 
 Other diagnostic interfaces are `npx @promptcompletion/cli validate` and `npx @promptcompletion/cli explain`.
 
-The package is not yet published to npm, so the `npx` forms above fail with a 404 today. Until it is published, install from a clone and use the `gauntlet` binary:
+`npx` fetches the published package, so nothing needs installing first. To run against a working copy instead — while changing the runtime itself — link the clone and use the `gauntlet` binary directly:
 
 ```bash
 cd packages/gauntlet-cli && npm install && npm link

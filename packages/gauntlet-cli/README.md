@@ -4,7 +4,7 @@ Deterministic policy and state engine for compiled Gauntlet Packs. Agents provid
 
 ## Install
 
-This package is not published to npm yet, so every `npx @promptcompletion/cli` command below fails with a 404 until it is. Install from a clone instead, which also keeps the binary tracking the checkout:
+Every command below runs straight from the registry with `npx`, needing no install. Install from a clone instead when you want the binary to track a working copy:
 
 ```bash
 cd packages/gauntlet-cli && npm install && npm link

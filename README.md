@@ -262,7 +262,7 @@ After a Gauntlet Pack exists, run:
 npx @promptcompletion/cli run --host auto
 ```
 
-The package is not published to npm yet, so that command 404s today. Until it is, install the CLI from your clone and use the `gauntlet` binary:
+That fetches the published CLI, so there is nothing to install first. To run against a working copy instead, link the clone:
 
 ```bash
 cd packages/gauntlet-cli && npm install && npm link
