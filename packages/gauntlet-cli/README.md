@@ -2,6 +2,17 @@
 
 Deterministic policy and state engine for compiled Gauntlet Packs. Agents provide semantic judgment; the CLI controls structural validity, legal transitions, evidence attachment, repair limits, architecture records, distribution readiness, and authority gates.
 
+## Install
+
+This package is not published to npm yet, so every `npx @agent-gauntlet/cli` command below fails with a 404 until it is. Install from a clone instead, which also keeps the binary tracking the checkout:
+
+```bash
+cd packages/gauntlet-cli && npm install && npm link
+gauntlet --help
+```
+
+Requires Node 24 or newer (`node:sqlite`) and an authenticated Codex, Claude Code, or GitHub Copilot CLI.
+
 ## Invoke once
 
 From a repository containing a compiled `.gauntlet/manifest.yaml`:

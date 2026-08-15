@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { initialState, nextSlices, RunStore, transition, validatePack } from '../src/engine.js';
+import { assignLabels, evaluateAssertions, initialState, nextSlices, RunStore, tallyComparison, transition, validatePack } from '../src/engine.js';
 
 const VALID = {
   'manifest.yaml': `gauntlet_version: 1\nstatus: executable\nobjective_id: demo\nexecution:\n  maximum_repairs_per_slice: 3\nhuman_dependency: {}\nfiles:\n${['manifest.yaml','objective.yaml','evidence.yaml','reference-contract.yaml','target-contracts.yaml','semantic-mappings.yaml','architecture-decisions.yaml','distribution-contract.yaml','uncertainties.yaml','execution-dag.yaml','acceptance-tests.yaml','critic-protocol.yaml','stop-policy.yaml','final-verification.yaml'].map(f=>`  - ${f}`).join('\n')}\n`,
@@ -142,4 +142,134 @@ test('rejects uncorroborated high-confidence social claims',()=>{
 test('rejects required speculative capabilities and untraced material claims',()=>{
   const p=reconstructionPack({'product-reconstruction.yaml':`capabilities:\n  - id: export\n    description: Predict markets from comments.\n    origin: { classification: speculative, evidence: [demo] }\n    required: true\n    acceptance: [core-test]\n`,'claim-traceability.yaml':'links: []\n'});
   const codes=validatePack(p.manifest).errors.map(e=>e.code); assert.ok(codes.includes('SPECULATION_REQUIRED')); assert.ok(codes.includes('UNTRACED_MATERIAL_CLAIM'));
+});
+
+test('a test with no declared assertions still means exit code zero', () => {
+  assert.equal(evaluateAssertions({}, { exitCode: 0, stdout: '', stderr: '' }).satisfied, true);
+  const failed = evaluateAssertions({}, { exitCode: 1, stdout: '', stderr: '' });
+  assert.equal(failed.satisfied, false);
+  assert.match(failed.failures[0], /exit_code was 1, expected 0/);
+});
+
+test('a negative test passes on its declared non-zero exit code', () => {
+  const spec = { assertions: [{ exit_code: 4 }, { stdout_equals: '' }, { stderr_matches: '^csv2json: .*expected 3\\n$' }] };
+  const observed = { exitCode: 4, stdout: '', stderr: 'csv2json: ragged.csv:3: record 3 has 2 fields; expected 3\n' };
+  assert.equal(evaluateAssertions(spec, observed).satisfied, true);
+  // The same command exiting 0 is now a failure, not a success.
+  const wrong = evaluateAssertions(spec, { ...observed, exitCode: 0 });
+  assert.equal(wrong.satisfied, false);
+  assert.match(wrong.failures[0], /exit_code was 0, expected 4/);
+});
+
+test('unmet stream assertions fail even when the process exits successfully', () => {
+  const contains = evaluateAssertions({ assertions: [{ exit_code: 0 }, { stdout_contains: 'PASS' }] }, { exitCode: 0, stdout: 'FAIL\n', stderr: '' });
+  assert.equal(contains.satisfied, false);
+  assert.match(contains.failures[0], /stdout did not contain "PASS"/);
+  const matches = evaluateAssertions({ assertions: [{ stderr_matches: '^ready$' }] }, { exitCode: 0, stdout: '', stderr: 'not ready' });
+  assert.equal(matches.satisfied, false);
+});
+
+test('unknown or malformed assertions fail closed rather than being ignored', () => {
+  const unknown = evaluateAssertions({ assertions: [{ exit_code: 0 }, { stdout_looks_fine: true }] }, { exitCode: 0, stdout: '', stderr: '' });
+  assert.equal(unknown.satisfied, false);
+  assert.match(unknown.failures[0], /Unsupported assertion: stdout_looks_fine/);
+  assert.equal(evaluateAssertions({ assertions: ['looks good'] }, { exitCode: 0, stdout: '', stderr: '' }).satisfied, false);
+  assert.equal(evaluateAssertions({ assertions: [{ stdout_matches: '([' }] }, { exitCode: 0, stdout: '', stderr: '' }).satisfied, false);
+});
+
+test('declared assertions, not exit codes, decide which evidence can pass a slice', () => {
+  const negative = `tests:\n  - id: core-test\n    slice_id: core\n    command: ["node", "-e", "process.stderr.write('boom\\\\n'); process.exit(4)"]\n    assertions:\n      - exit_code: 4\n      - stderr_contains: "boom"\n  - id: ui-test\n    slice_id: ui\n    command: ["node", "-e", "console.log('PASS')"]\n`;
+  const p = pack({ 'acceptance-tests.yaml': negative });
+  const validation = validatePack(p.manifest); const store = new RunStore(p.root);
+  try {
+    store.initialize(validation);
+    const builder = store.assign({ validation, sliceId: 'core', role: 'builder' });
+    const critic = store.assign({ validation, sliceId: 'core', role: 'critic' });
+    store.transition({ validation, token: builder.token, sliceId: 'core', target: 'building' });
+    const evidence = store.recordExecution({ validation, token: builder.token, sliceId: 'core', testId: 'core-test' });
+    assert.equal(evidence.exit_code, 4, 'the command really did fail');
+    assert.equal(evidence.satisfied, true, 'but it satisfied its declared assertions');
+    store.transition({ validation, token: builder.token, sliceId: 'core', target: 'critiquing' });
+    store.transition({ validation, token: critic.token, sliceId: 'core', target: 'passed', evidenceIds: [evidence.evidence_id] });
+    assert.deepEqual(store.ready(validation), ['ui']);
+  } finally { store.close(); }
+});
+
+test('evidence that misses its declared assertions cannot support a pass', () => {
+  const mismatched = `tests:\n  - id: core-test\n    slice_id: core\n    command: ["node", "-e", "console.log('PASS')"]\n    assertions:\n      - exit_code: 0\n      - stdout_contains: "TOTALLY DIFFERENT"\n  - id: ui-test\n    slice_id: ui\n    command: ["node", "-e", "console.log('PASS')"]\n`;
+  const p = pack({ 'acceptance-tests.yaml': mismatched });
+  const validation = validatePack(p.manifest); const store = new RunStore(p.root);
+  try {
+    store.initialize(validation);
+    const builder = store.assign({ validation, sliceId: 'core', role: 'builder' });
+    const critic = store.assign({ validation, sliceId: 'core', role: 'critic' });
+    store.transition({ validation, token: builder.token, sliceId: 'core', target: 'building' });
+    const evidence = store.recordExecution({ validation, token: builder.token, sliceId: 'core', testId: 'core-test' });
+    assert.equal(evidence.exit_code, 0, 'the process exited successfully');
+    assert.equal(evidence.satisfied, false, 'yet the declared assertion was not met');
+    store.transition({ validation, token: builder.token, sliceId: 'core', target: 'critiquing' });
+    assert.throws(() => store.transition({ validation, token: critic.token, sliceId: 'core', target: 'passed', evidenceIds: [evidence.evidence_id] }), /did not satisfy its declared assertions/);
+  } finally { store.close(); }
+});
+
+test('negated stream assertions let a pack forbid output such as stack traces', () => {
+  const spec = { assertions: [{ exit_code: 3 }, { stderr_not_matches: 'at .*\\(.*:\\d+:\\d+\\)' }, { stdout_not_contains: 'Traceback' }] };
+  assert.equal(evaluateAssertions(spec, { exitCode: 3, stdout: '', stderr: 'csv2json: cannot read missing.csv\n' }).satisfied, true);
+  const leaked = evaluateAssertions(spec, { exitCode: 3, stdout: '', stderr: 'boom\n    at read (/app/src/cli.js:12:9)\n' });
+  assert.equal(leaked.satisfied, false);
+  assert.match(leaked.failures[0], /stderr did not avoid matching/);
+});
+
+test('qualitative judging must declare a panel, a threshold, and an inspectable bar', () => {
+  const codes = doc => validatePack(pack({ 'critic-protocol.yaml': doc }).manifest).errors.map(e => e.code);
+  assert.deepEqual(codes('isolation: { fresh_context: true }\n'), [], 'a pack without qualitative criteria is unaffected');
+  const thin = codes('qualitative:\n  judges: 2\n  agreement: 0.5\n  criteria: []\n');
+  assert.ok(thin.includes('JUDGE_COUNT'), 'two judges is not a panel');
+  assert.ok(thin.includes('AGREEMENT_THRESHOLD'), 'a bare majority is not agreement');
+  assert.ok(thin.includes('CRITERIA_EMPTY'));
+  const bad = codes(`qualitative:\n  judges: 3\n  agreement: 0.67\n  criteria:\n    - id: polish\n      slice_id: nowhere\n      question: Which looks better?\n      candidate: "npm run shot"\n      artifact: out/a.png\n      reference: ""\n`);
+  assert.ok(bad.includes('UNKNOWN_CRITERION_SLICE'));
+  assert.ok(bad.includes('CANDIDATE_COMMAND'), 'a shell string is not an argv array');
+  assert.ok(bad.includes('REFERENCE_BAR'), 'a criterion without a bar is unjudgeable');
+});
+
+test('the runtime, not the judge, decides which artifact is A', () => {
+  const seen = new Set();
+  for (let i = 0; i < 200; i++) seen.add(assignLabels().candidate);
+  assert.deepEqual([...seen].sort(), ['A','B'], 'both orderings occur');
+  const fixed = assignLabels('a-fixed-nonce');
+  assert.equal(assignLabels('a-fixed-nonce').candidate, fixed.candidate, 'the mapping is reproducible from its recorded nonce');
+  assert.notEqual(fixed.candidate, fixed.reference);
+});
+
+test('consensus is arithmetic on individual votes, never a judge\'s claim', () => {
+  const labels = { candidate: 'B', reference: 'A' };
+  const tally = (votes, extra = {}) => tallyComparison({ votes, labels, judges: 3, agreement: 0.66, ...extra });
+  assert.equal(tally([{winner:'B'},{winner:'B'},{winner:'A'}]).outcome, 'won');
+  assert.equal(tally([{winner:'A'},{winner:'A'},{winner:'B'}]).outcome, 'lost');
+  // The declared threshold decides, not a bare majority: 0.67 across three judges is
+  // 2.01 votes, so two agreeing judges are one short of the bar the pack asked for.
+  assert.equal(tallyComparison({votes:[{winner:'B'},{winner:'B'},{winner:'A'}],labels,judges:3,agreement:0.67}).outcome, 'inconclusive');
+  assert.equal(tallyComparison({votes:[{winner:'B'},{winner:'B'},{winner:'A'}],labels,judges:3,agreement:1}).outcome, 'inconclusive');
+  assert.equal(tally([{winner:'B'},{winner:'A'},{winner:'tie'}]).outcome, 'inconclusive', 'a split panel is not approval');
+  assert.equal(tally([{winner:'B'},{winner:'tie'},{winner:'tie'}]).outcome, 'inconclusive');
+  assert.equal(tally([{winner:'B'},{winner:'tie'},{winner:'tie'}], {allowTie:true}).outcome, 'won', 'ties count for the candidate only when the criterion allows it');
+  assert.equal(tally([{winner:'B'},{winner:'B'}]).outcome, 'inconclusive', 'a judge that failed to vote cannot be assumed to agree');
+  assert.equal(tally([{winner:'B'},{winner:'B'},{winner:'yes please'}]).outcome, 'inconclusive', 'an unparseable vote is not a vote');
+});
+
+test('a threshold that silently demands unanimity is reported as a warning', () => {
+  const strict = validatePack(pack({ 'critic-protocol.yaml': `qualitative:\n  judges: 3\n  agreement: 0.67\n  criteria:\n    - id: polish\n      slice_id: core\n      question: Which looks better?\n      candidate: ["node", "shot.js"]\n      artifact: out/a.png\n      reference: ref/bar.png\n` }).manifest);
+  assert.equal(strict.valid, true, 'unanimity is legal, merely surprising');
+  assert.ok(strict.warnings.some(w => w.code === 'EFFECTIVE_UNANIMITY'));
+  const relaxed = validatePack(pack({ 'critic-protocol.yaml': `qualitative:\n  judges: 3\n  agreement: 0.66\n  criteria:\n    - id: polish\n      slice_id: core\n      question: Which looks better?\n      candidate: ["node", "shot.js"]\n      artifact: out/a.png\n      reference: ref/bar.png\n` }).manifest);
+  assert.deepEqual(relaxed.warnings, [], 'a threshold one dissent can survive warns about nothing');
+});
+
+test('a declared clean room must be reproducible and scripted with argv arrays', () => {
+  const codes = doc => validatePack(pack({ 'final-verification.yaml': doc }).manifest).errors.map(e => e.code);
+  assert.deepEqual(codes('clean_room: true\n'), [], 'runs defaults to two');
+  assert.deepEqual(codes('clean_room: false\nruns: 1\n'), [], 'a pack that claims no clean room is not held to one');
+  assert.ok(codes('clean_room: true\nruns: 1\n').includes('CLEAN_ROOM_RUNS'), 'a single run proves nothing about reproducibility');
+  assert.ok(codes('clean_room: true\nsetup:\n  - "npm ci && npm run build"\n').includes('CLEAN_ROOM_SETUP'), 'a shell string is not an argv array');
 });

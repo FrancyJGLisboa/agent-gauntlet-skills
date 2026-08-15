@@ -75,7 +75,7 @@ Make each execution slice independently testable. Specify prerequisites and depe
 
 Declare every deterministic acceptance command as an argument array, never a shell string. This lets the runtime execute the command without shell interpolation and capture attributable evidence. Include a bounded timeout and only the environment-variable names the test genuinely requires.
 
-Use objective verification wherever possible. For qualitative claims, require randomized blinded pairwise comparisons by at least three independent judges, evidence-backed rationales, and a declared agreement threshold.
+Use objective verification wherever possible. For qualitative claims, declare a `qualitative` block in `critic-protocol.yaml`: at least three judges, an agreement threshold, and one criterion per claim naming the question, the argv command that produces the candidate, its artifact path, and a `reference` bar — a real artifact committed to the repository that the work must beat. Do not write a criterion whose bar the runtime cannot open. The runtime randomizes the labels, stages both sides anonymously, dispatches the judges, and computes agreement; your job is to choose a bar worth clearing and a question a judge can answer by looking.
 
 If the repository contains `packages/gauntlet-cli/src/cli.js`, run `node packages/gauntlet-cli/src/cli.js validate .gauntlet/manifest.yaml`. Treat every reported error as a compilation defect. Do not mark a pack executable until deterministic validation passes.
 

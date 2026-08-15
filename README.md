@@ -262,6 +262,15 @@ After a Gauntlet Pack exists, run:
 npx @agent-gauntlet/cli run --host auto
 ```
 
+The package is not published to npm yet, so that command 404s today. Until it is, install the CLI from your clone and use the `gauntlet` binary:
+
+```bash
+cd packages/gauntlet-cli && npm install && npm link
+gauntlet run --host auto
+```
+
+To drive Gauntlet loops in your own repositories, read [docs/using-on-your-projects.md](docs/using-on-your-projects.md).
+
 The driver auto-detects an authenticated Codex, Claude Code, or GitHub Copilot CLI and owns the complete bounded builder → critic → repair → verifier loop. If the original skill request asks for a delivered product, `compile-gauntlet` automatically continues into `run-gauntlet`; the user does not need a second prompt.
 
 On success, read `.gauntlet/product-passport.md` for a subject-matter explanation of what was built, architectural choices, operational/distribution instructions, proof, and known limitations.

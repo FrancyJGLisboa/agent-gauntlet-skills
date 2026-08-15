@@ -28,6 +28,18 @@ export class WorkspaceManager {
     this.store.setMeta(this.key(id,'dir'),dir);this.store.setMeta(this.key(id,'base'),base);this.store.setMeta(this.key(id,'branch'),branch);
     return {dir,base,branch};
   }
+  // A detached checkout of the slice's committed head. It holds exactly what an
+  // outsider would receive — no untracked builder scratch, no installed dependencies,
+  // no caches — which is the only sense in which "clean room" is checkable.
+  cleanRoom(id){
+    const workspace=this.get(id);
+    if(!workspace)throw failure('CLEAN_ROOM_UNAVAILABLE','No workspace exists for this slice',{slice:id});
+    const commit=git(['rev-parse','HEAD'],workspace.dir).stdout.trim();
+    const dir=path.join(os.tmpdir(),`agent-gauntlet-cleanroom-${safe(id)}-${crypto.randomBytes(5).toString('hex')}`);
+    git(['worktree','add','--detach',dir,commit],this.repo);
+    return {dir,commit};
+  }
+  removeCleanRoom(room){ if(room?.dir&&fs.existsSync(room.dir)) git(['worktree','remove','--force',room.dir],this.repo,{allowFailure:true}); }
   changed(workspace){return git(['status','--porcelain'],workspace.dir).stdout.trimEnd().split('\n').filter(Boolean).map(l=>l.slice(3).trim());}
   assertScope(workspace,spec){
     const changed=this.changed(workspace),scope=Array.isArray(spec.builder?.scope)?spec.builder.scope:[];
@@ -35,6 +47,18 @@ export class WorkspaceManager {
     const outside=changed.filter(file=>!scope.some(s=>file===s||file.startsWith(`${s.replace(/\/$/,'')}/`)));
     if(outside.length)throw failure('SCOPE_VIOLATION','Builder changed files outside its declared scope',{outside,scope});
     return changed;
+  }
+  // Restores paths a builder touched outside its slice scope so the worktree can
+  // carry a bounded repair instead of wedging on the same violation forever.
+  revert(workspace,paths){
+    const reverted=[];
+    for(const file of paths??[]){
+      const tracked=git(['ls-files','--error-unmatch','--',file],workspace.dir,{allowFailure:true}).status===0;
+      if(tracked)git(['checkout','--',file],workspace.dir,{allowFailure:true});
+      else git(['clean','-fdx','--',file],workspace.dir,{allowFailure:true});
+      reverted.push(file);
+    }
+    return reverted;
   }
   checkpoint(workspace,spec){
     const changed=this.assertScope(workspace,spec);if(!changed.length)return null;

@@ -2,8 +2,11 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agent-gauntlet.dev/schemas/evidence.schema.json",
   "type": "object",
-  "required": ["evidence_id", "assignment_id", "slice_id", "test_id", "pack_fingerprint", "command", "cwd", "exit_code", "stdout_sha256", "stderr_sha256"],
+  "required": ["evidence_id", "assignment_id", "slice_id", "test_id", "pack_fingerprint", "command", "cwd", "exit_code", "stdout_sha256", "stderr_sha256", "satisfied"],
   "properties": {
+    "satisfied": { "type": "boolean", "description": "Whether the run met the test's declared assertions. Only satisfied evidence may support passed or verified." },
+    "assertion_failures": { "type": "array", "items": { "type": "string" } },
+    "assertions": { "type": "array", "items": { "type": "object" } },
     "pack_fingerprint": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "command": { "type": "array", "minItems": 1, "items": { "type": "string" } },
     "exit_code": { "type": ["integer", "null"] },

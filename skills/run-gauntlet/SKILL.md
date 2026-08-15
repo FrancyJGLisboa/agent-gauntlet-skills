@@ -27,9 +27,11 @@ Run this once from the target repository and let it reach a terminal state:
 node packages/gauntlet-cli/src/cli.js run --host auto --manifest .gauntlet/manifest.yaml
 ```
 
-If the CLI is installed from the registry, use `npx @agent-gauntlet/cli run --host auto`. Pin `--host codex`, `claude`, or `copilot` only when requested or auto-detection cannot disambiguate.
+If the CLI is installed globally from a clone (`npm link` inside `packages/gauntlet-cli`), use `gauntlet run --host auto` from the target repository. The registry form `npx @agent-gauntlet/cli run --host auto` works only once the package is published. Pin `--host codex`, `claude`, or `copilot` only when requested or auto-detection cannot disambiguate.
 
-The driver launches a new non-resumed host process for every builder, critic, and verifier turn; keeps capability tokens outside agent prompts; runs declared commands itself; dispatches repair and blocker states; enforces bounds; and writes the Product Passport. Stay attached until it exits. Use the manual workflow only to diagnose or recover a structured driver failure.\n\nRequire a clean Git repository. The driver creates a persistent isolated worktree and branch per slice, rejects changes outside `builder.scope`, gives critics and verifiers read-only permissions, and integrates only after final verification. Rerun the same command after interruption to resume the persisted building worktree.
+The driver launches a new non-resumed host process for every builder, critic, and verifier turn; keeps capability tokens outside agent prompts; runs declared commands itself; dispatches repair and blocker states; enforces bounds; and writes the Product Passport. Stay attached until it exits. Use the manual workflow only to diagnose or recover a structured driver failure.
+
+Require a clean Git repository. The driver creates a persistent isolated worktree and branch per slice, rejects changes outside `builder.scope`, gives critics and verifiers read-only permissions, and integrates only after final verification. Rerun the same command after interruption to resume the persisted building worktree.
 
 ### 1. Initialize state
 
@@ -63,7 +65,7 @@ Parallelize only independent read-only investigations or isolated slices. Never 
 
 Reject verdicts based on code appearance, effort, generic praise, unexecuted assumptions, or numeric taste scores. A critic must cite commands, artifacts, output differences, or blinded comparisons.
 
-For qualitative criteria, randomize candidate labels and use the pack's minimum number of independent judges. Judges must make pairwise selections and name the decisive observable gap. Apply the declared agreement rule; disagreement below threshold is `INCONCLUSIVE`, not approval.
+Qualitative criteria are enforced by the runtime, not by you. When `critic-protocol.yaml` declares a `qualitative` block, a slice cannot pass on acceptance tests alone: the CLI generates the candidate, assigns the A/B labels, stages both sides anonymously, dispatches the declared number of independent read-only judges, and applies the agreement rule itself. Never assemble a panel by hand, never tell a judge which artifact is the candidate, and never read a split panel as approval — disagreement below the threshold is `INCONCLUSIVE`, which returns the slice to its builder.
 
 The builder must never be the final critic of its own slice.
 
@@ -77,7 +79,7 @@ For legitimate human escalation, present the compiled decision packet and safe d
 
 ### 6. Run final verification
 
-After all required slices pass, execute the clean-room procedure from `final-verification.yaml` twice unless the pack specifies a stronger rule. Verify from a clean checkout/environment, rebuild generated artifacts, run end-to-end tests, check provenance, and confirm no critical unresolved uncertainty remains.
+When `final-verification.yaml` declares `clean_room: true`, the runtime performs it: for each declared run it creates a detached checkout of the slice's committed head, executes the declared `setup` argv steps, runs the acceptance tests there, and removes the room. Do not assemble a clean room by hand or re-run the tests in the builder's worktree and call it clean — a worktree still holds uncommitted files, dependencies, and caches, which is precisely what the procedure exists to exclude. Your job is to read the clean-room summary you are given and attempt to falsify it: check provenance, rebuild expectations, and confirm no critical unresolved uncertainty remains.
 
 Assign a final fresh-context critic to validate the evidence chain and attempt to falsify completion. Completion requires both the formal stop policy and final critic to pass.
 

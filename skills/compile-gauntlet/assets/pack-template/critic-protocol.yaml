@@ -1,15 +1,31 @@
 isolation:
   fresh_context: true
   builder_rationale_hidden: true
-  candidate_labels_randomized: true
-verdict_schema:
-  verdict: PASS_OR_FAIL
-  confidence: 0.0
-  claims_checked: []
-  evidence: []
-  largest_gap: null
-  proof_of_resolution: null
-qualitative_comparison:
-  minimum_independent_judges: 3
-  minimum_agreement: 0.67
-  scoring_prohibited: true
+
+# Qualitative judging is optional. Declare it only when the slice produces something
+# whose quality a test cannot express, and only when a real artifact exists to compare
+# against. The runtime enforces every field below: it generates the candidate, assigns
+# the A/B labels from a recorded nonce, stages both under neutral names outside the
+# worktree, dispatches this many independent read-only judges, and computes agreement
+# itself. A judge reports what it saw; it cannot declare consensus.
+#
+# Delete this block when the slice has no qualitative criteria.
+qualitative:
+  judges: 3                 # minimum 3
+  agreement: 0.66           # fraction that must agree; 0.67 across 3 judges means all 3
+  criteria:
+    - id: REPLACE-criterion-id
+      slice_id: REPLACE-slice-id
+      # A question a judge can answer by looking, not by reading the code.
+      question: Which of these reads as the more polished, trustworthy product?
+      # argv array producing the candidate, run by the CLI inside the slice worktree.
+      candidate: ["node", "scripts/REPLACE-produce-artifact.mjs"]
+      artifact: out/REPLACE-candidate.png
+      # The bar: a real artifact committed to the repository. A bar the runtime cannot
+      # open is a bar an agent can claim to have cleared.
+      reference: reference/REPLACE-real-world-equivalent.png
+      allow_tie: false
+      timeout_ms: 300000
+# Outcomes: won (candidate reaches quorum), lost (the bar does, and the slice returns
+# to its builder), inconclusive (a split panel or an unanswered judge). Inconclusive is
+# never approval.
