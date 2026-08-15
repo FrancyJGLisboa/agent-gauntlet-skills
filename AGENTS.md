@@ -22,6 +22,15 @@ npx @agent-gauntlet/cli run --host auto
 
 Other diagnostic interfaces are `npx @agent-gauntlet/cli validate` and `npx @agent-gauntlet/cli explain`.
 
+The package is not yet published to npm, so the `npx` forms above fail with a 404 today. Until it is published, install from a clone and use the `gauntlet` binary:
+
+```bash
+cd packages/gauntlet-cli && npm install && npm link
+gauntlet deliver --request-file gauntlet-request.md --host auto
+```
+
+See [docs/using-on-your-projects.md](docs/using-on-your-projects.md) for driving a Gauntlet in a repository other than this one.
+
 ## Repository map
 
 - `skills/compile-gauntlet/`: converts vague goals and evidence into a complete `.gauntlet/` contract.

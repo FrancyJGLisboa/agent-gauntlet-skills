@@ -36,6 +36,7 @@ stateDiagram-v2
     [*] --> pending
     pending --> building
     building --> critiquing
+    building --> repairing
     critiquing --> repairing
     repairing --> building
     critiquing --> passed
@@ -47,6 +48,8 @@ stateDiagram-v2
     critiquing --> blocked
     final_verification --> blocked
 ```
+
+A builder that writes outside its slice's `builder.scope` does not integrate and does not stop the run: the runtime reverts the out-of-scope paths in the worktree and moves the slice `building -> repairing`, so the breach costs one bounded repair instead of wedging the worktree.
 
 Interrupted `building` is resumable: the database retains the state and workspace metadata, and the next invocation dispatches a fresh builder into the existing worktree.
 
@@ -61,7 +64,7 @@ Interrupted `building` is resumable: the database retains the state and workspac
 ## Supported hosts
 
 - Codex: `codex exec --ephemeral`, JSON Schema output, workspace-write for compiler/builders, read-only for critics/verifiers.
-- Claude Code: `claude -p --bare`, JSON Schema output, write tools only for compiler/builders.
+- Claude Code: `claude -p`, JSON Schema output, write tools only for compiler/builders. `--bare` is deliberately not passed: it restricts Anthropic authentication to `ANTHROPIC_API_KEY` or `apiKeyHelper` and never reads an existing interactive login, so every role would fail for subscription users. The cost is that each turn loads hooks, plugins, and discovered `CLAUDE.md`; isolation still comes from a fresh process, the allowed-tool set, and the worktree read-only assertion.
 - GitHub Copilot CLI: `copilot -p --no-ask-user`, write and shell tools only for compiler/builders.
 
 Every role starts a new process. Session resume flags are intentionally prohibited across roles.

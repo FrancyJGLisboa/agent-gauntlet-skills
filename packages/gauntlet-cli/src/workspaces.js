@@ -36,6 +36,18 @@ export class WorkspaceManager {
     if(outside.length)throw failure('SCOPE_VIOLATION','Builder changed files outside its declared scope',{outside,scope});
     return changed;
   }
+  // Restores paths a builder touched outside its slice scope so the worktree can
+  // carry a bounded repair instead of wedging on the same violation forever.
+  revert(workspace,paths){
+    const reverted=[];
+    for(const file of paths??[]){
+      const tracked=git(['ls-files','--error-unmatch','--',file],workspace.dir,{allowFailure:true}).status===0;
+      if(tracked)git(['checkout','--',file],workspace.dir,{allowFailure:true});
+      else git(['clean','-fdx','--',file],workspace.dir,{allowFailure:true});
+      reverted.push(file);
+    }
+    return reverted;
+  }
   checkpoint(workspace,spec){
     const changed=this.assertScope(workspace,spec);if(!changed.length)return null;
     git(['add','--all'],workspace.dir);git(['-c','user.name=Agent Gauntlet','-c','user.email=gauntlet@local','commit','-m',`gauntlet(${spec.id}): builder checkpoint`],workspace.dir);

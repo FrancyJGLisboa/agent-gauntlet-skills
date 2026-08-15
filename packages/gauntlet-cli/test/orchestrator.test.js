@@ -50,10 +50,43 @@ test('verified changes integrate and interrupted building resumes',()=>{
   assert.equal(result.completed,true);assert.match(fs.readFileSync(path.join(root,'src/market.js'),'utf8'),/isolated gauntlet change/);
   assert.equal(spawnSync('git',['status','--porcelain','--untracked-files=no'],{cwd:root,encoding:'utf8'}).stdout,'');
 });
-test('out-of-scope builder changes are rejected',()=>{
-  const root=project(),adapter={name:'mock',invoke(input){if(input.role==='builder')fs.writeFileSync(path.join(input.cwd,'forbidden.txt'),'no');return {verdict:input.role==='builder'?'complete':'pass',summary:'',reason:'',largest_gap:'',changed_files:[]};}};
-  assert.throws(()=>runGauntlet({manifest:path.join(root,'.gauntlet/manifest.yaml'),adapter}),e=>e.code==='SCOPE_VIOLATION');
+test('a persistently out-of-scope builder is reverted and stopped by the repair cap',()=>{
+  const root=project(),worktrees=new Set();
+  const adapter={name:'mock',invoke(input){worktrees.add(input.cwd);if(input.role==='builder')fs.writeFileSync(path.join(input.cwd,'forbidden.txt'),'no');return {verdict:input.role==='builder'?'complete':'pass',summary:'',reason:'',largest_gap:'',changed_files:[]};}};
+  assert.throws(()=>runGauntlet({manifest:path.join(root,'.gauntlet/manifest.yaml'),adapter}),/Repair limit exceeded/);
+  for(const dir of worktrees)assert.ok(!fs.existsSync(path.join(dir,'forbidden.txt')),'out-of-scope file reverted from the worktree');
+  assert.ok(!fs.existsSync(path.join(root,'forbidden.txt')),'out-of-scope file never reaches the checkout');
 });
+test('an out-of-scope builder recovers on repair instead of wedging the run',()=>{
+  const root=project();let breached=false,worktree;
+  const adapter={name:'mock',invoke(input){
+    if(input.role==='builder'&&input.prompt.includes('"id": "core"')){
+      worktree=input.cwd;
+      if(!breached){breached=true;fs.writeFileSync(path.join(input.cwd,'forbidden.txt'),'no');}
+      else fs.appendFileSync(path.join(input.cwd,'src/market.js'),'\n// in-scope change\n');
+    }
+    return {verdict:input.role==='builder'?'complete':'pass',summary:'ok',reason:'passed',largest_gap:'none',changed_files:[]};
+  }};
+  const result=runGauntlet({manifest:path.join(root,'.gauntlet/manifest.yaml'),adapter});
+  assert.equal(result.completed,true);
+  assert.equal(result.status.slices.find(s=>s.id==='core').repairs,1,'the breach costs exactly one repair');
+  assert.ok(!fs.existsSync(path.join(worktree,'forbidden.txt')));
+  assert.ok(!fs.existsSync(path.join(root,'forbidden.txt')));
+  assert.match(fs.readFileSync(path.join(root,'src/market.js'),'utf8'),/in-scope change/,'in-scope work still integrates');
+});
+test('every role prompt names its isolated worktree, never the original checkout',()=>{
+  const root=project(),calls=[];
+  const adapter={name:'mock',invoke(input){calls.push(input);return {verdict:input.role==='builder'?'complete':'pass',summary:'ok',reason:'passed',largest_gap:'none',changed_files:[]};}};
+  const result=runGauntlet({manifest:path.join(root,'.gauntlet/manifest.yaml'),adapter});
+  assert.equal(result.completed,true);
+  assert.ok(calls.length>=6,'builder, critic, and verifier all ran');
+  for(const call of calls){
+    assert.notEqual(call.cwd,root,`${call.role} must run in a worktree, not the checkout`);
+    assert.ok(call.prompt.includes(`Work only in ${call.cwd}`),`${call.role} prompt must name its own worktree`);
+    assert.ok(!call.prompt.includes(`Work only in ${root}`),`${call.role} prompt must not name the original checkout`);
+  }
+});
+
 test('deliver compiles a missing pack and runs it in one invocation',()=>{
   const root=project(),backup=path.join(root,'pack-backup');fs.renameSync(path.join(root,'.gauntlet'),backup);let compiled=false;
   const adapter={name:'mock',invoke(input){if(input.role==='compiler'){fs.renameSync(backup,path.join(root,'.gauntlet'));compiled=true;return {verdict:'complete',summary:'compiled',reason:'',largest_gap:'',changed_files:[]};}return {verdict:input.role==='builder'?'complete':'pass',summary:'ok',reason:'passed',largest_gap:'none',changed_files:[]};}};

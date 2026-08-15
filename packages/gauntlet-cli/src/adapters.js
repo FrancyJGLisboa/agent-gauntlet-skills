@@ -31,14 +31,20 @@ class CodexAdapter {
     finally{fs.rmSync(schema,{force:true});fs.rmSync(output,{force:true});}
   }
 }
+// `--bare` is intentionally absent: it restricts Anthropic authentication to
+// ANTHROPIC_API_KEY or apiKeyHelper and never reads an existing interactive
+// login, which makes every role fail for subscription users.
+export function claudeArgs({prompt,role}) {
+  const writable=role==='builder'||role==='compiler';
+  const args=['-p',prompt,'--allowedTools',writable?'Read,Edit,Write,Bash':'Read'];
+  if(writable) args.push('--permission-mode','acceptEdits');
+  args.push('--output-format','json','--json-schema',JSON.stringify(RESULT_SCHEMA));
+  return args;
+}
 class ClaudeAdapter {
   constructor(){this.name='claude';}
   invoke({prompt,cwd,timeoutMs,role}) {
-    const writable=role==='builder'||role==='compiler';
-    const args=['-p',prompt,'--bare','--allowedTools',writable?'Read,Edit,Write,Bash':'Read'];
-    if(writable) args.push('--permission-mode','acceptEdits');
-    args.push('--output-format','json','--json-schema',JSON.stringify(RESULT_SCHEMA));
-    const out=invoke('claude',args,{cwd,timeoutMs});
+    const out=invoke('claude',claudeArgs({prompt,role}),{cwd,timeoutMs});
     const envelope=parseJsonText(out);return envelope.structured_output??parseJsonText(envelope.result);
   }
 }

@@ -21,7 +21,7 @@ const RECONSTRUCTION_MODES = new Set(['youtube_demonstration','blog_description'
 export const STATES = ['pending', 'building', 'critiquing', 'repairing', 'passed', 'failed', 'blocked', 'final_verification', 'verified'];
 const TRANSITIONS = {
   pending: ['building', 'blocked'],
-  building: ['critiquing', 'failed', 'blocked'],
+  building: ['critiquing', 'repairing', 'failed', 'blocked'],
   critiquing: ['passed', 'repairing', 'failed', 'blocked'],
   repairing: ['building', 'failed', 'blocked'],
   passed: ['final_verification'],
