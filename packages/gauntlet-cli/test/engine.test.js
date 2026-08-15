@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { initialState, nextSlices, RunStore, transition, validatePack } from '../src/engine.js';
+import { evaluateAssertions, initialState, nextSlices, RunStore, transition, validatePack } from '../src/engine.js';
 
 const VALID = {
   'manifest.yaml': `gauntlet_version: 1\nstatus: executable\nobjective_id: demo\nexecution:\n  maximum_repairs_per_slice: 3\nhuman_dependency: {}\nfiles:\n${['manifest.yaml','objective.yaml','evidence.yaml','reference-contract.yaml','target-contracts.yaml','semantic-mappings.yaml','architecture-decisions.yaml','distribution-contract.yaml','uncertainties.yaml','execution-dag.yaml','acceptance-tests.yaml','critic-protocol.yaml','stop-policy.yaml','final-verification.yaml'].map(f=>`  - ${f}`).join('\n')}\n`,
@@ -142,4 +142,80 @@ test('rejects uncorroborated high-confidence social claims',()=>{
 test('rejects required speculative capabilities and untraced material claims',()=>{
   const p=reconstructionPack({'product-reconstruction.yaml':`capabilities:\n  - id: export\n    description: Predict markets from comments.\n    origin: { classification: speculative, evidence: [demo] }\n    required: true\n    acceptance: [core-test]\n`,'claim-traceability.yaml':'links: []\n'});
   const codes=validatePack(p.manifest).errors.map(e=>e.code); assert.ok(codes.includes('SPECULATION_REQUIRED')); assert.ok(codes.includes('UNTRACED_MATERIAL_CLAIM'));
+});
+
+test('a test with no declared assertions still means exit code zero', () => {
+  assert.equal(evaluateAssertions({}, { exitCode: 0, stdout: '', stderr: '' }).satisfied, true);
+  const failed = evaluateAssertions({}, { exitCode: 1, stdout: '', stderr: '' });
+  assert.equal(failed.satisfied, false);
+  assert.match(failed.failures[0], /exit_code was 1, expected 0/);
+});
+
+test('a negative test passes on its declared non-zero exit code', () => {
+  const spec = { assertions: [{ exit_code: 4 }, { stdout_equals: '' }, { stderr_matches: '^csv2json: .*expected 3\\n$' }] };
+  const observed = { exitCode: 4, stdout: '', stderr: 'csv2json: ragged.csv:3: record 3 has 2 fields; expected 3\n' };
+  assert.equal(evaluateAssertions(spec, observed).satisfied, true);
+  // The same command exiting 0 is now a failure, not a success.
+  const wrong = evaluateAssertions(spec, { ...observed, exitCode: 0 });
+  assert.equal(wrong.satisfied, false);
+  assert.match(wrong.failures[0], /exit_code was 0, expected 4/);
+});
+
+test('unmet stream assertions fail even when the process exits successfully', () => {
+  const contains = evaluateAssertions({ assertions: [{ exit_code: 0 }, { stdout_contains: 'PASS' }] }, { exitCode: 0, stdout: 'FAIL\n', stderr: '' });
+  assert.equal(contains.satisfied, false);
+  assert.match(contains.failures[0], /stdout did not contain "PASS"/);
+  const matches = evaluateAssertions({ assertions: [{ stderr_matches: '^ready$' }] }, { exitCode: 0, stdout: '', stderr: 'not ready' });
+  assert.equal(matches.satisfied, false);
+});
+
+test('unknown or malformed assertions fail closed rather than being ignored', () => {
+  const unknown = evaluateAssertions({ assertions: [{ exit_code: 0 }, { stdout_looks_fine: true }] }, { exitCode: 0, stdout: '', stderr: '' });
+  assert.equal(unknown.satisfied, false);
+  assert.match(unknown.failures[0], /Unsupported assertion: stdout_looks_fine/);
+  assert.equal(evaluateAssertions({ assertions: ['looks good'] }, { exitCode: 0, stdout: '', stderr: '' }).satisfied, false);
+  assert.equal(evaluateAssertions({ assertions: [{ stdout_matches: '([' }] }, { exitCode: 0, stdout: '', stderr: '' }).satisfied, false);
+});
+
+test('declared assertions, not exit codes, decide which evidence can pass a slice', () => {
+  const negative = `tests:\n  - id: core-test\n    slice_id: core\n    command: ["node", "-e", "process.stderr.write('boom\\\\n'); process.exit(4)"]\n    assertions:\n      - exit_code: 4\n      - stderr_contains: "boom"\n  - id: ui-test\n    slice_id: ui\n    command: ["node", "-e", "console.log('PASS')"]\n`;
+  const p = pack({ 'acceptance-tests.yaml': negative });
+  const validation = validatePack(p.manifest); const store = new RunStore(p.root);
+  try {
+    store.initialize(validation);
+    const builder = store.assign({ validation, sliceId: 'core', role: 'builder' });
+    const critic = store.assign({ validation, sliceId: 'core', role: 'critic' });
+    store.transition({ validation, token: builder.token, sliceId: 'core', target: 'building' });
+    const evidence = store.recordExecution({ validation, token: builder.token, sliceId: 'core', testId: 'core-test' });
+    assert.equal(evidence.exit_code, 4, 'the command really did fail');
+    assert.equal(evidence.satisfied, true, 'but it satisfied its declared assertions');
+    store.transition({ validation, token: builder.token, sliceId: 'core', target: 'critiquing' });
+    store.transition({ validation, token: critic.token, sliceId: 'core', target: 'passed', evidenceIds: [evidence.evidence_id] });
+    assert.deepEqual(store.ready(validation), ['ui']);
+  } finally { store.close(); }
+});
+
+test('evidence that misses its declared assertions cannot support a pass', () => {
+  const mismatched = `tests:\n  - id: core-test\n    slice_id: core\n    command: ["node", "-e", "console.log('PASS')"]\n    assertions:\n      - exit_code: 0\n      - stdout_contains: "TOTALLY DIFFERENT"\n  - id: ui-test\n    slice_id: ui\n    command: ["node", "-e", "console.log('PASS')"]\n`;
+  const p = pack({ 'acceptance-tests.yaml': mismatched });
+  const validation = validatePack(p.manifest); const store = new RunStore(p.root);
+  try {
+    store.initialize(validation);
+    const builder = store.assign({ validation, sliceId: 'core', role: 'builder' });
+    const critic = store.assign({ validation, sliceId: 'core', role: 'critic' });
+    store.transition({ validation, token: builder.token, sliceId: 'core', target: 'building' });
+    const evidence = store.recordExecution({ validation, token: builder.token, sliceId: 'core', testId: 'core-test' });
+    assert.equal(evidence.exit_code, 0, 'the process exited successfully');
+    assert.equal(evidence.satisfied, false, 'yet the declared assertion was not met');
+    store.transition({ validation, token: builder.token, sliceId: 'core', target: 'critiquing' });
+    assert.throws(() => store.transition({ validation, token: critic.token, sliceId: 'core', target: 'passed', evidenceIds: [evidence.evidence_id] }), /did not satisfy its declared assertions/);
+  } finally { store.close(); }
+});
+
+test('negated stream assertions let a pack forbid output such as stack traces', () => {
+  const spec = { assertions: [{ exit_code: 3 }, { stderr_not_matches: 'at .*\\(.*:\\d+:\\d+\\)' }, { stdout_not_contains: 'Traceback' }] };
+  assert.equal(evaluateAssertions(spec, { exitCode: 3, stdout: '', stderr: 'csv2json: cannot read missing.csv\n' }).satisfied, true);
+  const leaked = evaluateAssertions(spec, { exitCode: 3, stdout: '', stderr: 'boom\n    at read (/app/src/cli.js:12:9)\n' });
+  assert.equal(leaked.satisfied, false);
+  assert.match(leaked.failures[0], /stderr did not avoid matching/);
 });

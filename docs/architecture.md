@@ -23,7 +23,7 @@ flowchart TD
 |---|---|---|
 | Compilation | Intent, evidence interpretation, architecture proposals | Required files, mappings, repair cap, fingerprint |
 | Building | Implementation within a slice | Worktree, declared scope, role capability |
-| Testing | Nothing about recorded outcomes | Command argv, cwd boundary, timeout, hashes, artifacts |
+| Testing | Nothing about recorded outcomes | Command argv, cwd boundary, timeout, hashes, artifacts, declared assertions |
 | Criticism | Semantic pass/repair judgment | Fresh process, read-only permissions, evidence ownership |
 | Verification | Falsification and final judgment | Successful independent evidence and legal transition |
 | Integration | Nothing | Verified state, unchanged base commit, cherry-pick |
@@ -48,6 +48,8 @@ stateDiagram-v2
     critiquing --> blocked
     final_verification --> blocked
 ```
+
+Each acceptance test may declare `assertions` — `exit_code`, plus `stdout_`/`stderr_` `equals`, `contains`, or `matches`. The runtime evaluates them when it captures evidence and records a `satisfied` flag; only satisfied evidence can support `passed` or `verified`. A test declaring no assertions still means exit code zero. This lets a pack verify error paths, which a hard-coded exit-code-zero rule cannot express. Unsupported or malformed assertions fail closed so an inert assertion can never read as a pass.
 
 A builder that writes outside its slice's `builder.scope` does not integrate and does not stop the run: the runtime reverts the out-of-scope paths in the worktree and moves the slice `building -> repairing`, so the breach costs one bounded repair instead of wedging the worktree.
 

@@ -157,6 +157,42 @@ function validateDag(doc, file, errors) {
   if ([...ids].some(visit)) errors.push(issue('DAG_CYCLE', 'Execution DAG contains a cycle', file, 'slices'));
 }
 
+// A declared assertion is the pack's definition of success for one test. Without
+// this, the runtime scored every test as `exit_code === 0`, so a negative test
+// (`exit_code: 4`) could never pass and stdout/stderr expectations were inert.
+function matches(pattern, actual, key, failures) {
+  let expression;
+  try { expression = new RegExp(String(pattern)); }
+  catch (error) { failures.push(`${key} is not a valid regular expression: ${error.message}`); return null; }
+  return expression.test(actual);
+}
+const OPERATORS = {
+  equals: (a, e) => a === String(e),
+  contains: (a, e) => a.includes(String(e)),
+  not_contains: (a, e) => !a.includes(String(e)),
+  matches: (a, e, k, f) => matches(e, a, k, f),
+  not_matches: (a, e, k, f) => { const hit = matches(e, a, k, f); return hit === null ? null : !hit; }
+};
+const DESCRIPTIONS = { equals: 'equal', contains: 'contain', not_contains: 'omit', matches: 'match', not_matches: 'avoid matching' };
+const STREAM_ASSERTIONS = new Map(['stdout','stderr'].flatMap(s => Object.keys(OPERATORS).map(o => [`${s}_${o}`, [s, o]])));
+export function evaluateAssertions(spec, { exitCode, stdout, stderr }) {
+  const declared = asArray(spec?.assertions);
+  if (!declared.length) return { satisfied: exitCode === 0, failures: exitCode === 0 ? [] : [`exit_code was ${exitCode}, expected 0`] };
+  const failures = [], streams = { stdout: stdout ?? '', stderr: stderr ?? '' };
+  for (const assertion of declared) {
+    if (!isObject(assertion)) { failures.push(`Assertion is not a mapping: ${JSON.stringify(assertion)}`); continue; }
+    for (const [key, expected] of Object.entries(assertion)) {
+      if (key === 'exit_code') { if (exitCode !== expected) failures.push(`exit_code was ${exitCode}, expected ${expected}`); continue; }
+      const target = STREAM_ASSERTIONS.get(key);
+      if (!target) { failures.push(`Unsupported assertion: ${key}`); continue; }
+      const [stream, operator] = target;
+      const held = OPERATORS[operator](streams[stream], expected, key, failures);
+      if (held === false) failures.push(`${stream} did not ${DESCRIPTIONS[operator]} ${JSON.stringify(String(expected))}`);
+    }
+  }
+  return { satisfied: failures.length === 0, failures };
+}
+
 export function validatePack(manifestPath = '.gauntlet/manifest.yaml') {
   const absoluteManifest = path.resolve(manifestPath);
   const root = path.dirname(absoluteManifest);
@@ -214,6 +250,7 @@ export class RunStore {
         command_json TEXT NOT NULL, cwd TEXT NOT NULL, exit_code INTEGER,
         signal TEXT, stdout_sha256 TEXT NOT NULL, stderr_sha256 TEXT NOT NULL,
         artifact_path TEXT NOT NULL, git_commit TEXT, git_dirty INTEGER NOT NULL,
+        satisfied INTEGER NOT NULL DEFAULT 0, assertion_failures TEXT NOT NULL DEFAULT '[]',
         FOREIGN KEY(assignment_id) REFERENCES assignments(id)
       );
       CREATE TABLE IF NOT EXISTS events (
@@ -297,13 +334,15 @@ export class RunStore {
     let gitCommit = null, gitDirty = true;
     const rev = spawnSync('git',['rev-parse','HEAD'],{cwd,encoding:'utf8'}); if(rev.status===0) gitCommit=rev.stdout.trim();
     const dirty = spawnSync('git',['status','--porcelain'],{cwd,encoding:'utf8'}); if(dirty.status===0) gitDirty=dirty.stdout.trim().length>0;
+    const verdict = evaluateAssertions(spec, { exitCode: result.status, stdout, stderr });
     const artifact = { evidence_id:id, assignment_id:assignment.id, slice_id:sliceId, test_id:testId,
       pack_fingerprint:validation.fingerprint, started_at:started, completed_at:completed,
       command:spec.command, cwd, exit_code:result.status, signal:result.signal, stdout, stderr,
       stdout_sha256:sha256(stdout), stderr_sha256:sha256(stderr), git_commit:gitCommit, git_dirty:gitDirty,
+      assertions:asArray(spec.assertions), satisfied:verdict.satisfied, assertion_failures:verdict.failures,
       node_version:process.version, platform:process.platform, arch:process.arch };
     fs.writeFileSync(artifactPath, `${JSON.stringify(artifact,null,2)}\n`, { mode:0o600 });
-    this.db.prepare('INSERT INTO evidence VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(id, assignment.id, sliceId, testId, validation.fingerprint, completed, JSON.stringify(spec.command), cwd, result.status, result.signal, artifact.stdout_sha256, artifact.stderr_sha256, artifactPath, gitCommit, gitDirty?1:0);
+    this.db.prepare('INSERT INTO evidence VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(id, assignment.id, sliceId, testId, validation.fingerprint, completed, JSON.stringify(spec.command), cwd, result.status, result.signal, artifact.stdout_sha256, artifact.stderr_sha256, artifactPath, gitCommit, gitDirty?1:0, verdict.satisfied?1:0, JSON.stringify(verdict.failures));
     return artifact;
   }
   transition({ validation, token, sliceId, target, evidenceIds = [], reason = '' }) {
@@ -321,7 +360,7 @@ export class RunStore {
         for (const id of evidenceIds) {
           const e = this.db.prepare('SELECT * FROM evidence WHERE id=? AND slice_id=? AND fingerprint=?').get(id, sliceId, validation.fingerprint);
           if (!e) throw new Error(`Evidence is missing, stale, or belongs to another slice: ${id}`);
-          if (e.exit_code !== 0) throw new Error(`Failing evidence cannot support ${target}: ${id}`);
+          if (!e.satisfied) throw new Error(`Evidence did not satisfy its declared assertions and cannot support ${target}: ${id} (${JSON.parse(e.assertion_failures ?? '[]').join('; ') || `exit_code ${e.exit_code}`})`);
           if (assignment.role === 'critic' && e.assignment_id === assignment.id) throw new Error('Critic verdict must rely on independently captured execution, not its own manufactured evidence');
         }
       }
