@@ -57,6 +57,7 @@ See [docs/using-on-your-projects.md](docs/using-on-your-projects.md) for driving
 9. Proxies, unknowns, unavailable mappings, and speculative claims must never be presented as equivalent or proven.
 10. Qualitative criteria are judged blind against a declared reference bar. The runtime — never an agent — generates the candidate, assigns the A/B labels, and computes agreement; a split or incomplete panel is `INCONCLUSIVE`, which is not approval.
 11. Publishing and deployment require an external authority capability. Agents may prepare but cannot self-authorize release.
+12. Concurrent slices are bounded by `maximum_parallel_builders` (1 to 8; absent means 1). A step transitions only its own slice: a reopen aimed at a slice another step is running is queued until that step settles, and integration is attempted before `verified` is recorded so a base moved by a sibling returns the slice to its clean room instead of merging on a stale verdict. Git operations are serialized by `spawnSync` blocking the event loop; making them asynchronous requires a mutex.
 
 If a requested change weakens one of these invariants, reject that design and implement a safer alternative.
 

@@ -102,6 +102,20 @@ A builder that writes outside its slice's `builder.scope` does not integrate and
 
 Interrupted `building` is resumable: the database retains the state and workspace metadata, and the next invocation dispatches a fresh builder into the existing worktree.
 
+## Running slices concurrently
+
+`manifest.execution.maximum_parallel_builders` is the ceiling on how many slices hold an agent turn at once. It must be an integer between 1 and 8, and a pack that omits it runs one slice at a time — a pack compiled against serial execution keeps it.
+
+The scheduler dispatches one state transition per slice per turn. A slice is eligible when it is not already in flight, not terminal, and either mid-state or `pending` with every dependency in `passed`, `final_verification`, or `verified`. Nothing shared is mutated: each slice owns its worktree, its evidence rows, and its own state, and no step transitions a slice other than its own. `--max-turns` counts dispatched steps, so it still bounds total agent turns rather than scheduler iterations.
+
+Concurrency is bounded by cost, not only by safety. Each builder is a full agent process, so N of them multiply token spend and memory by N; they shorten wall-clock, not the bill.
+
+Three consequences are handled explicitly rather than left to timing:
+
+- **Git operations stay serialized.** Every call in `workspaces.js` is `spawnSync`, which blocks the event loop for its duration, so two slices can never interleave `git worktree add` on the same repository. This is load-bearing: converting those calls to asynchronous spawn requires introducing a mutex first.
+- **A moved base sends the slice back through the clean room.** A sibling that integrates first moves the base a slice was verified against. Integration is therefore attempted *before* `verified` is recorded; on `INTEGRATION_BASE_MOVED` the runtime replays the slice onto the new base and leaves it in `final_verification`, so the clean room runs again against the combined tree. A pass is never recorded for a tree no clean room saw.
+- **An upstream reopen never lands under a live builder.** If `blocking_slice` names a slice another step is currently running, the dependent is parked to `pending` immediately and the owner's `-> repairing` transition is queued until that step settles. The dependent stays out of the scheduler until the queued reopen has been applied.
+
 ## When a run stops
 
 Every stop writes `.gauntlet/blocker.md` and `.gauntlet/blocker.json` before the error propagates, because `Repair limit exceeded (3)` is not an explanation to hand a subject-matter expert.

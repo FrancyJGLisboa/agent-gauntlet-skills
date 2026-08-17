@@ -5,8 +5,15 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 function failure(code,message,details={}){const e=new Error(message);e.code=code;e.details=details;return e;}
+// Applied to every invocation rather than to the commands that happen to need it
+// today. cherry-pick and rebase create commits, so without an identity they fail on
+// any machine with no global git config — a fresh container, a CI runner — and they
+// fail at integration, after every builder, critic, and clean room has already been
+// paid for. Callers that want a different identity pass their own -c later in argv,
+// where git's last-wins rule gives it precedence.
+const IDENTITY=['-c','user.name=Agent Gauntlet','-c','user.email=gauntlet@local'];
 function git(args,cwd,{allowFailure=false}={}) {
-  const r=spawnSync('git',args,{cwd,encoding:'utf8',timeout:120000,maxBuffer:16*1024*1024});
+  const r=spawnSync('git',[...IDENTITY,...args],{cwd,encoding:'utf8',timeout:120000,maxBuffer:16*1024*1024});
   if(!allowFailure&&r.status!==0)throw failure('GIT_OPERATION_FAILED',`git ${args[0]} failed`,{stderr:r.stderr?.trim(),cwd});
   return r;
 }
@@ -72,6 +79,25 @@ export class WorkspaceManager {
   }
   assertReadOnly(workspace,before){const after=git(['status','--porcelain','--untracked-files=all'],workspace.dir).stdout;if(after!==before)throw failure('CRITIC_MUTATION','Read-only agent modified the isolated workspace');}
   snapshot(workspace){return git(['status','--porcelain','--untracked-files=all'],workspace.dir).stdout;}
+  // With concurrent slices the target branch moves under a slice that was verified
+  // against an older base, and integrating anyway would merge work no clean room ever
+  // saw in combination. Replaying the slice onto the new base is the recovery; the
+  // caller must then re-run final verification, because the tree being verified has
+  // changed. Every git call here is spawnSync, which blocks the event loop for its
+  // duration — that is what keeps concurrent slices from interleaving git operations
+  // on the same repository. Converting these to async spawn requires adding a mutex.
+  rebase(id){
+    const workspace=this.get(id);if(!workspace)return null;
+    const base=git(['rev-parse','HEAD'],this.repo).stdout.trim();
+    if(base===workspace.base)return null;
+    const replay=git(['rebase','--onto',base,workspace.base],workspace.dir,{allowFailure:true});
+    if(replay.status!==0){
+      git(['rebase','--abort'],workspace.dir,{allowFailure:true});
+      throw failure('INTEGRATION_REBASE_CONFLICT','Slice work conflicts with a sibling that integrated first',{slice:id,base,stderr:replay.stderr?.trim()});
+    }
+    this.store.setMeta(this.key(id,'base'),base);
+    return base;
+  }
   integrate(id){
     const workspace=this.get(id);if(!workspace)return;
     const current=git(['rev-parse','HEAD'],this.repo).stdout.trim();

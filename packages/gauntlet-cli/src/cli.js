@@ -38,9 +38,9 @@ try {
     const requestFile=option(args,'--request-file'); let request=option(args,'--request');
     if(requestFile) request=fs.readFileSync(requestFile,'utf8');
     const sources=repeated(args,'--source'); if(sources.length) request+=`\n\nReference sources:\n${sources.join('\n')}`;
-    print(deliverGauntlet({request,manifest:manifest(args),host:option(args,'--host','auto'),maxCompileAttempts:Number(option(args,'--max-compile-attempts','3')),maxTurns:Number(option(args,'--max-turns','100')),timeoutMs:Number(option(args,'--timeout-ms','900000')),onEvent:e=>process.stderr.write(`${JSON.stringify(e)}\n`)})); process.exit(0);
+    print(await deliverGauntlet({request,manifest:manifest(args),host:option(args,'--host','auto'),maxCompileAttempts:Number(option(args,'--max-compile-attempts','3')),maxTurns:Number(option(args,'--max-turns','100')),timeoutMs:Number(option(args,'--timeout-ms','900000')),onEvent:e=>process.stderr.write(`${JSON.stringify(e)}\n`)})); process.exit(0);
   }
-  if(command==='run') { print(runGauntlet({manifest:manifest(args),host:option(args,'--host','auto'),maxTurns:Number(option(args,'--max-turns','100')),timeoutMs:Number(option(args,'--timeout-ms','900000')),onEvent:e=>process.stderr.write(`${JSON.stringify(e)}\n`)})); process.exit(0); }
+  if(command==='run') { print(await runGauntlet({manifest:manifest(args),host:option(args,'--host','auto'),maxTurns:Number(option(args,'--max-turns','100')),timeoutMs:Number(option(args,'--timeout-ms','900000')),onEvent:e=>process.stderr.write(`${JSON.stringify(e)}\n`)})); process.exit(0); }
   if(command==='explain') { print(explainGauntlet(manifest(args))); process.exit(0); }
   if(command==='validate') { const v=validatePack(manifest(args)); print({valid:v.valid,fingerprint:v.fingerprint,errors:v.errors,warnings:v.warnings}); process.exit(v.valid?0:1); }
   const v=checked(args); const store=new RunStore(v.root);
