@@ -8,7 +8,7 @@ param(
 $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $SkillsDir = Join-Path $RepoRoot "skills"
-$SkillNames = @("compile-gauntlet", "run-gauntlet")
+$SkillNames = @("frame-failure", "compile-gauntlet", "run-gauntlet")
 
 foreach ($Skill in $SkillNames) {
   $SkillFile = Join-Path (Join-Path $SkillsDir $Skill) "SKILL.md"

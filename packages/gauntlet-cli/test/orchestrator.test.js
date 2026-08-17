@@ -14,6 +14,13 @@ function project(){
   spawnSync('git',['init','-q'],{cwd:root});spawnSync('git',['add','.'],{cwd:root});spawnSync('git',['-c','user.name=Test','-c','user.email=test@example.test','commit','-qm','fixture'],{cwd:root});
   return root;
 }
+// The fixture's objective names its refused outcomes by test id, so a fixture that
+// replaces the acceptance tests must repoint them. Deleting them instead would quietly
+// drop the invariant from most of this file.
+function retargetRefusals(root,testIds){
+  fs.writeFileSync(path.join(root,'.gauntlet','objective.yaml'),
+    `outcome: working product\nnon_goals: []\nsuccess_evidence: ${JSON.stringify(testIds)}\nrefused_outcomes:\n  - id: unproven\n    statement: It must never report success without the declared tests passing.\n    verified_by: ${JSON.stringify(testIds)}\n`);
+}
 test('one invocation completes builder-critic-verifier loops and writes a passport',async()=>{
   const root=project(),calls=[];
   const adapter={name:'mock',invoke(input){calls.push(input);return {verdict:input.role==='builder'?'complete':'pass',summary:'requirements satisfied',reason:'independent checks passed',largest_gap:'none',changed_files:[]};}};
@@ -245,6 +252,7 @@ function cleanRoomProject({finalVerification,command}){
     `slices:\n  - id: core\n    depends_on: []\n    builder: { scope: [src/market.js] }\n    critic: { independent: true }\n    acceptance_tests: [unit-test]\n`);
   fs.writeFileSync(path.join(root,'.gauntlet','acceptance-tests.yaml'),
     `tests:\n  - id: unit-test\n    slice_id: core\n    cwd: ..\n    command: ${JSON.stringify(command)}\n`);
+  retargetRefusals(root,['unit-test']);
   spawnSync('git',['add','-A'],{cwd:root});spawnSync('git',['-c','user.name=T','-c','user.email=t@e.test','commit','-qm','cleanroom'],{cwd:root});
   return root;
 }
@@ -367,6 +375,7 @@ test('creating the scoped file in a new directory is not a scope violation', asy
     `slices:\n  - id: core\n    depends_on: []\n    builder: { scope: [fresh/thing.js] }\n    critic: { independent: true }\n    acceptance_tests: [unit-test]\n`);
   fs.writeFileSync(path.join(root,'.gauntlet','acceptance-tests.yaml'),
     `tests:\n  - id: unit-test\n    slice_id: core\n    cwd: ..\n    command: ["node","-e","import('node:fs').then(fs=>process.exit(fs.existsSync('fresh/thing.js')?0:1))"]\n`);
+  retargetRefusals(root,['unit-test']);
   spawnSync('git',['add','-A'],{cwd:root});
   spawnSync('git',['-c','user.name=T','-c','user.email=t@e.test','commit','-qm','scoped'],{cwd:root});
   const adapter={name:'mock',invoke(input){
@@ -387,6 +396,7 @@ test('a critic that writes into the worktree is caught', async () => {
     `slices:\n  - id: core\n    depends_on: []\n    builder: { scope: [scratch/] }\n    critic: { independent: true }\n    acceptance_tests: [unit-test]\n`);
   fs.writeFileSync(path.join(root,'.gauntlet','acceptance-tests.yaml'),
     `tests:\n  - id: unit-test\n    slice_id: core\n    cwd: ..\n    command: ["node","-e","import('node:fs').then(fs=>process.exit(fs.existsSync('scratch/a.txt')?0:1))"]\n`);
+  retargetRefusals(root,['unit-test']);
   spawnSync('git',['add','-A'],{cwd:root});
   spawnSync('git',['-c','user.name=T','-c','user.email=t@e.test','commit','-qm','scoped'],{cwd:root});
   const adapter={name:'mock',invoke(input){
@@ -409,6 +419,7 @@ function parallelProject(limit){
   fs.writeFileSync(path.join(root,'.gauntlet','acceptance-tests.yaml'),
     `tests:\n  - id: alpha-test\n    slice_id: alpha\n    cwd: ..\n    command: ${exists('alpha')}\n  - id: beta-test\n    slice_id: beta\n    cwd: ..\n    command: ${exists('beta')}\n`);
   fs.writeFileSync(path.join(root,'.gauntlet','final-verification.yaml'),'clean_room: true\nruns: 2\n');
+  retargetRefusals(root,['alpha-test','beta-test']);
   spawnSync('git',['add','-A'],{cwd:root});
   spawnSync('git',['-c','user.name=T','-c','user.email=t@e.test','commit','-qm','parallel'],{cwd:root});
   return root;

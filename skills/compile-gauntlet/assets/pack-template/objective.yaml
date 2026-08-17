@@ -1,0 +1,15 @@
+outcome: REPLACE-what-this-delivers-and-for-whom
+non_goals: []
+capabilities: []
+constraints: []
+success_evidence: []
+# The outcomes the person asking for this refuses to accept. Every other field in a
+# pack is reconstructible from evidence; these are not, and inventing them substitutes
+# your taste for their obligation. Keep their wording. One sentence each, observable by
+# looking at the running product, and each naming the tests that would catch it — the
+# runtime rejects a refusal that names no test, or names one that does not exist.
+# Elicit them with the frame-failure skill when the request does not state them.
+refused_outcomes:
+  - id: REPLACE-short-id
+    statement: It must never REPLACE-what-happens when REPLACE-condition.
+    verified_by: [REPLACE-test-id]

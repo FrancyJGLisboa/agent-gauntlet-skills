@@ -1,0 +1,12 @@
+interface:
+  display_name: Frame Failure
+  short_description: Interview for the outcomes a person refuses to accept
+  default_prompt: Use $frame-failure to interview me about what would make this wrong,
+    and write a Gauntlet request from my answers.
+policy:
+  products:
+  - chatgpt
+  - codex
+  - api
+  - atlas
+  allow_implicit_invocation: true

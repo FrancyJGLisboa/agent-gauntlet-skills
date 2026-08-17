@@ -273,3 +273,34 @@ test('a declared clean room must be reproducible and scripted with argv arrays',
   assert.ok(codes('clean_room: true\nruns: 1\n').includes('CLEAN_ROOM_RUNS'), 'a single run proves nothing about reproducibility');
   assert.ok(codes('clean_room: true\nsetup:\n  - "npm ci && npm run build"\n').includes('CLEAN_ROOM_SETUP'), 'a shell string is not an argv array');
 });
+
+// A refused outcome is the one part of a pack nothing in the repository can supply,
+// and the part most easily reduced to decoration.
+const refusing = body => ({ 'objective.yaml': `outcome: working product\nrefused_outcomes:\n${body}` });
+
+test('a refused outcome that no test would catch is a compilation defect', () => {
+  const { manifest } = pack(refusing('  - id: silent-drop\n    statement: It must never skip a row without telling me.\n    verified_by: []\n'));
+  const v = validatePack(manifest);
+  assert.equal(v.valid, false);
+  assert.ok(v.errors.some(e => e.code === 'REFUSED_OUTCOME_UNVERIFIED'), 'an unverified refusal is not a bar');
+});
+
+test('a refused outcome cannot point at a test that does not exist', () => {
+  const { manifest } = pack(refusing('  - id: stale\n    statement: It must never show stale prices as current.\n    verified_by: [no-such-test]\n'));
+  const v = validatePack(manifest);
+  assert.equal(v.valid, false);
+  assert.ok(v.errors.some(e => e.code === 'REFUSED_OUTCOME_UNKNOWN_TEST'));
+});
+
+test('two refused outcomes cannot share an id', () => {
+  const { manifest } = pack(refusing(
+    '  - id: stale\n    statement: One.\n    verified_by: [core-test]\n' +
+    '  - id: stale\n    statement: Two.\n    verified_by: [ui-test]\n'));
+  assert.ok(validatePack(manifest).errors.some(e => /Duplicate refused outcome/.test(e.message)));
+});
+
+test('a refused outcome tied to a real test validates, and omitting the section stays legal', () => {
+  const tied = pack(refusing('  - id: stale\n    statement: It must never show stale prices as current.\n    verified_by: [core-test, ui-test]\n'));
+  assert.equal(validatePack(tied.manifest).valid, true, 'a refusal naming real tests is well formed');
+  assert.equal(validatePack(pack().manifest).valid, true, 'packs compiled before this contract still validate');
+});

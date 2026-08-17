@@ -4,11 +4,14 @@ Portable Agent Skills that turn vague requests into evidence-grounded execution 
 
 ## Skills
 
+- **frame-failure** — interviews you about the outcomes you refuse to accept and writes the request the compiler reads. Optional, and the only step that asks you anything; it never asks a technical question. Use it when you know what you want but not what would make it wrong.
 - **compile-gauntlet** — investigates the goal, reference repository, and target sources; reconstructs behavioral and data contracts; converts uncertainty into experiments; and writes a machine-executable `.gauntlet/` pack.
 - **run-gauntlet** — consumes the pack, runs isolated builders and fresh-context critics, records evidence, enforces stop policies, and performs clean-room verification.
 
 ```text
 vague request -> compile-gauntlet -> .gauntlet/ pack -> run-gauntlet -> verified implementation
+                      ^
+              frame-failure, when the request cannot say what would make it wrong
 ```
 
 ## Install from inside the terminal UI
