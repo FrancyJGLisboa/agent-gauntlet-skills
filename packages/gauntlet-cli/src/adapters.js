@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 
 export class AdapterError extends Error {
   constructor(code, message, details = {}) { super(message); this.name='AdapterError'; this.code=code; this.details=details; }
@@ -13,21 +13,40 @@ function parseJsonText(text) {
   const start=value.indexOf('{'),end=value.lastIndexOf('}'); if(start>=0&&end>start)try{return JSON.parse(value.slice(start,end+1));}catch{}
   throw new AdapterError('AGENT_OUTPUT_INVALID','Agent did not return valid JSON',{output:value.slice(0,2000)});
 }
+const OUTPUT_CAP=16*1024*1024;
+// Asynchronous on purpose: spawnSync blocks the event loop for the whole agent turn,
+// which makes concurrent builders and a parallel judge panel impossible. The failure
+// codes are the ones the sync version produced, so callers see no behavioral change.
 function invoke(command,args,{cwd,timeoutMs=900000}) {
-  const result=spawnSync(command,args,{cwd,encoding:'utf8',timeout:timeoutMs,maxBuffer:16*1024*1024,env:process.env});
-  if(result.error)throw new AdapterError(result.error.code==='ETIMEDOUT'?'AGENT_TIMEOUT':'AGENT_LAUNCH_FAILED',result.error.message,{command});
-  if(result.status!==0)throw new AdapterError('AGENT_FAILED',`${command} exited with ${result.status}`,{stderr:String(result.stderr??'').slice(-4000)});
-  return result.stdout;
+  return new Promise((resolve,reject)=>{
+    let child;
+    try{ child=spawn(command,args,{cwd,env:process.env}); }
+    catch(error){ reject(new AdapterError('AGENT_LAUNCH_FAILED',error.message,{command})); return; }
+    let stdout='',stderr='',settled=false;
+    const done=fn=>{ if(settled)return; settled=true; clearTimeout(timer); fn(); };
+    const abort=(code,message)=>done(()=>{ child.kill('SIGKILL'); reject(new AdapterError(code,message,{command})); });
+    const timer=setTimeout(()=>abort('AGENT_TIMEOUT',`${command} exceeded ${timeoutMs}ms`),timeoutMs);
+    child.stdout.setEncoding('utf8'); child.stderr.setEncoding('utf8');
+    // Capping both streams reproduces spawnSync's maxBuffer: an agent that streams
+    // without bound must fail rather than exhaust this process's memory.
+    child.stdout.on('data',chunk=>{ stdout+=chunk; if(stdout.length>OUTPUT_CAP)abort('AGENT_LAUNCH_FAILED',`${command} exceeded the ${OUTPUT_CAP} byte output cap`); });
+    child.stderr.on('data',chunk=>{ stderr+=chunk; if(stderr.length>OUTPUT_CAP)abort('AGENT_LAUNCH_FAILED',`${command} exceeded the ${OUTPUT_CAP} byte output cap`); });
+    child.on('error',error=>done(()=>reject(new AdapterError('AGENT_LAUNCH_FAILED',error.message,{command}))));
+    child.on('close',status=>done(()=>{
+      if(status===0)resolve(stdout);
+      else reject(new AdapterError('AGENT_FAILED',`${command} exited with ${status}`,{stderr:stderr.slice(-4000)}));
+    }));
+  });
 }
 const RESULT_SCHEMA={type:'object',additionalProperties:false,properties:{verdict:{type:'string',enum:['complete','pass','repair','blocked']},summary:{type:'string'},reason:{type:'string'},largest_gap:{type:'string'},changed_files:{type:'array',items:{type:'string'}},blocking_slice:{type:'string',description:'Id of an upstream slice that owns the defect, when the failure cannot be fixed inside this slice. Empty otherwise.'}},required:['verdict','summary','reason','largest_gap','changed_files','blocking_slice']};
 class CodexAdapter {
   constructor(){this.name='codex';}
-  invoke({prompt,cwd,runtimeDir,timeoutMs,role,schema:shape=RESULT_SCHEMA}) {
+  async invoke({prompt,cwd,runtimeDir,timeoutMs,role,schema:shape=RESULT_SCHEMA}) {
     fs.mkdirSync(runtimeDir,{recursive:true});
     const schema=path.join(runtimeDir,`schema-${Date.now()}-${Math.random().toString(16).slice(2)}.json`);
     const output=path.join(runtimeDir,`result-${Date.now()}-${Math.random().toString(16).slice(2)}.json`);
     fs.writeFileSync(schema,JSON.stringify(shape));
-    try{invoke('codex',['exec','--ephemeral','--sandbox',role==='builder'||role==='compiler'?'workspace-write':'read-only','--output-schema',schema,'-o',output,prompt],{cwd,timeoutMs});return parseJsonText(fs.readFileSync(output,'utf8'));}
+    try{await invoke('codex',['exec','--ephemeral','--sandbox',role==='builder'||role==='compiler'?'workspace-write':'read-only','--output-schema',schema,'-o',output,prompt],{cwd,timeoutMs});return parseJsonText(fs.readFileSync(output,'utf8'));}
     finally{fs.rmSync(schema,{force:true});fs.rmSync(output,{force:true});}
   }
 }
@@ -43,17 +62,17 @@ export function claudeArgs({prompt,role,schema=RESULT_SCHEMA}) {
 }
 class ClaudeAdapter {
   constructor(){this.name='claude';}
-  invoke({prompt,cwd,timeoutMs,role,schema}) {
-    const out=invoke('claude',claudeArgs({prompt,role,schema}),{cwd,timeoutMs});
+  async invoke({prompt,cwd,timeoutMs,role,schema}) {
+    const out=await invoke('claude',claudeArgs({prompt,role,schema}),{cwd,timeoutMs});
     const envelope=parseJsonText(out);return envelope.structured_output??parseJsonText(envelope.result);
   }
 }
 class CopilotAdapter {
   constructor(){this.name='copilot';}
-  invoke({prompt,cwd,timeoutMs,role,schema=RESULT_SCHEMA}) {
+  async invoke({prompt,cwd,timeoutMs,role,schema=RESULT_SCHEMA}) {
     const constrained=`${prompt}\nReturn exactly one JSON object matching this schema, without Markdown:\n${JSON.stringify(schema)}`;
     const permissions=role==='builder'||role==='compiler'?'read,write,shell':'read';
-    return parseJsonText(invoke('copilot',['-p',constrained,'-s','--no-ask-user',`--allow-tool=${permissions}`],{cwd,timeoutMs}));
+    return parseJsonText(await invoke('copilot',['-p',constrained,'-s','--no-ask-user',`--allow-tool=${permissions}`],{cwd,timeoutMs}));
   }
 }
 export function resolveAdapter(host='auto') {

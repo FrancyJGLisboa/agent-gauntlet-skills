@@ -72,6 +72,25 @@ export class WorkspaceManager {
   }
   assertReadOnly(workspace,before){const after=git(['status','--porcelain','--untracked-files=all'],workspace.dir).stdout;if(after!==before)throw failure('CRITIC_MUTATION','Read-only agent modified the isolated workspace');}
   snapshot(workspace){return git(['status','--porcelain','--untracked-files=all'],workspace.dir).stdout;}
+  // With concurrent slices the target branch moves under a slice that was verified
+  // against an older base, and integrating anyway would merge work no clean room ever
+  // saw in combination. Replaying the slice onto the new base is the recovery; the
+  // caller must then re-run final verification, because the tree being verified has
+  // changed. Every git call here is spawnSync, which blocks the event loop for its
+  // duration — that is what keeps concurrent slices from interleaving git operations
+  // on the same repository. Converting these to async spawn requires adding a mutex.
+  rebase(id){
+    const workspace=this.get(id);if(!workspace)return null;
+    const base=git(['rev-parse','HEAD'],this.repo).stdout.trim();
+    if(base===workspace.base)return null;
+    const replay=git(['rebase','--onto',base,workspace.base],workspace.dir,{allowFailure:true});
+    if(replay.status!==0){
+      git(['rebase','--abort'],workspace.dir,{allowFailure:true});
+      throw failure('INTEGRATION_REBASE_CONFLICT','Slice work conflicts with a sibling that integrated first',{slice:id,base,stderr:replay.stderr?.trim()});
+    }
+    this.store.setMeta(this.key(id,'base'),base);
+    return base;
+  }
   integrate(id){
     const workspace=this.get(id);if(!workspace)return;
     const current=git(['rev-parse','HEAD'],this.repo).stdout.trim();

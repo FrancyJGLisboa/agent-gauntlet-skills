@@ -59,7 +59,7 @@ Follow the execution DAG. For each ready slice:
 
 Use `gauntlet next`, `gauntlet assign`, `gauntlet execute`, and guarded `gauntlet transition` commands. In manual recovery, keep every expiring capability token in the controlling runtime; never place it in an agent prompt. Pass evidence IDs created by `gauntlet execute`; external files are not verdict evidence. The CLI's pack fingerprint, command capture, evidence hashes, dependency order, role capabilities, repair cap, and release-authority gate are hard invariants.
 
-Parallelize only independent read-only investigations or isolated slices. Never allow concurrent writers in the same workspace. Integrate passing slices in dependency order and rerun affected upstream contracts.
+Concurrency is the runtime's to schedule, not yours. The driver runs up to `manifest.execution.maximum_parallel_builders` slices at once — an integer from 1 to 8, defaulting to 1 when the pack omits it — dispatching a slice only when it is not already in flight and every dependency has reached `passed` or later. Each slice writes in its own worktree, so there are never concurrent writers in one workspace. Do not assemble a fleet by hand, and do not raise the limit to make a run finish sooner: every builder is a full agent process, so N of them multiply token spend by N without making the work cheaper. If a sibling integrates first, the runtime replays the later slice onto the moved base and sends it back through its clean room rather than integrating a verdict the combined tree never earned.
 
 ### 4. Enforce critic integrity
 

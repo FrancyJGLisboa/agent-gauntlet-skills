@@ -144,6 +144,16 @@ export function cleanRoomPlan(validation) {
   return { enabled: doc.clean_room === true, runs: Number.isInteger(doc.runs) ? doc.runs : 2,
     setup: asArray(doc.setup), requireIdenticalOutput: doc.require_identical_output === true };
 }
+// Every concurrent builder is a full agent process, so this multiplies token spend
+// and memory by N rather than making the same run cheaper. The ceiling keeps a pack
+// from declaring a fleet no machine can host; the default of 1 means a pack that
+// never mentions concurrency keeps the serial behavior it was compiled against.
+export const MAX_PARALLEL_BUILDERS = 8;
+export function parallelBuilders(validation) {
+  const declared = validation.documents?.['manifest.yaml']?.execution?.maximum_parallel_builders;
+  if (!Number.isInteger(declared) || declared < 1) return 1;
+  return Math.min(declared, MAX_PARALLEL_BUILDERS);
+}
 function validateFinalVerification(doc, file, errors) {
   if (doc?.clean_room !== true) return;
   if ('runs' in doc && (!Number.isInteger(doc.runs) || doc.runs < 2)) errors.push(issue('CLEAN_ROOM_RUNS', 'A clean room must be exercised at least twice; one run proves nothing about reproducibility', file, 'runs'));
@@ -293,6 +303,9 @@ export function validatePack(manifestPath = '.gauntlet/manifest.yaml') {
     requireKeys(manifest, ['gauntlet_version', 'status', 'objective_id', 'execution', 'human_dependency', 'files'], 'manifest.yaml', errors);
     if (!['executable', 'conditionally_executable', 'blocked'].includes(manifest.status)) errors.push(issue('MANIFEST_STATUS', 'Invalid manifest status', 'manifest.yaml', 'status'));
     if ((manifest.execution?.maximum_repairs_per_slice ?? 4) > 3) errors.push(issue('REPAIR_LIMIT', 'maximum_repairs_per_slice cannot exceed 3', 'manifest.yaml', 'execution.maximum_repairs_per_slice'));
+    const concurrency = manifest.execution?.maximum_parallel_builders;
+    if (concurrency !== undefined && (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > MAX_PARALLEL_BUILDERS))
+      errors.push(issue('PARALLEL_LIMIT', `maximum_parallel_builders must be an integer between 1 and ${MAX_PARALLEL_BUILDERS}`, 'manifest.yaml', 'execution.maximum_parallel_builders'));
     const declared = new Set(asArray(manifest.files).map(v => typeof v === 'string' ? v : v?.path));
     for (const name of requiredFiles) if (!declared.has(name)) errors.push(issue('FILE_INDEX', `Manifest file index does not declare ${name}`, 'manifest.yaml', 'files'));
   }
@@ -373,9 +386,15 @@ export class RunStore {
   status() {
     return { fingerprint: this.getMeta('pack_fingerprint'), slices: this.db.prepare('SELECT id,state,repairs FROM slices ORDER BY id').all(), events: this.db.prepare('SELECT * FROM events ORDER BY seq').all() };
   }
+  // `final_verification` belongs here for the same reason `passed` does: it is strictly
+  // later than `passed`, so a dependency that was good enough to start on a moment ago
+  // cannot become insufficient by advancing. Omitting it made a dependent that the
+  // scheduler had already cleared fail its own `building` transition once slices could
+  // advance concurrently, because this list is what that guard consults.
+  static DEPENDENCY_SATISFIED = ['passed','final_verification','verified'];
   ready(validation) {
     const states = new Map(this.db.prepare('SELECT id,state FROM slices').all().map(s => [s.id, s.state]));
-    return asArray(validation.documents['execution-dag.yaml']?.slices).filter(s => states.get(s.id) === 'pending' && asArray(s.depends_on).every(d => ['passed','verified'].includes(states.get(d)))).map(s => s.id);
+    return asArray(validation.documents['execution-dag.yaml']?.slices).filter(s => states.get(s.id) === 'pending' && asArray(s.depends_on).every(d => RunStore.DEPENDENCY_SATISFIED.includes(states.get(d)))).map(s => s.id);
   }
   assign({ validation, sliceId, role, ttlSeconds = 3600 }) {
     this.assertFingerprint(validation.fingerprint);
@@ -433,7 +452,7 @@ export class RunStore {
   // runJudges({ dir, question, judges }) is supplied by the dispatcher so this stays
   // free of any agent host, while the runtime keeps the parts that must not be
   // delegated: producing the candidate, blinding it, and counting the votes.
-  recordComparison({ validation, token, sliceId, criterion, workspaceRoot, runJudges }) {
+  async recordComparison({ validation, token, sliceId, criterion, workspaceRoot, runJudges }) {
     this.assertFingerprint(validation.fingerprint);
     const assignment = this.authenticate(token, sliceId, ['critic','verifier']);
     const qualitative = validation.documents['critic-protocol.yaml'].qualitative;
@@ -462,7 +481,7 @@ export class RunStore {
     fs.copyFileSync(referencePath, staged[labels.reference]);
     const digests = { candidate_sha256: sha256(fs.readFileSync(candidatePath)), reference_sha256: sha256(fs.readFileSync(referencePath)) };
     let votes;
-    try { votes = asArray(runJudges({ dir: stage, a: staged.A, b: staged.B, question: criterion.question, judges: qualitative.judges })); }
+    try { votes = asArray(await runJudges({ dir: stage, a: staged.A, b: staged.B, question: criterion.question, judges: qualitative.judges })); }
     finally { fs.rmSync(stage, { recursive: true, force: true }); }
     const tally = tallyComparison({ votes, labels, judges: qualitative.judges, agreement: qualitative.agreement, allowTie: criterion.allow_tie === true });
     const id = crypto.randomUUID(), dir = path.join(validation.root, 'runs', sliceId);
