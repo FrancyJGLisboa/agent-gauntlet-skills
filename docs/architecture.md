@@ -102,6 +102,23 @@ A builder that writes outside its slice's `builder.scope` does not integrate and
 
 Interrupted `building` is resumable: the database retains the state and workspace metadata, and the next invocation dispatches a fresh builder into the existing worktree.
 
+## The one thing the compiler cannot derive
+
+Every other part of a pack is reconstructible. Contracts come from running the reference, architecture from workload evidence, tests from the objective, quality bars from a committed artifact. **What the person refuses to accept is not.** It comes from a business, a duty, a prior incident, or a reputation, and no amount of repository inspection recovers it.
+
+So `objective.yaml` may declare them, in the user's own words, each naming the tests that would catch it:
+
+```yaml
+refused_outcomes:
+  - id: stale-price
+    statement: It must never show me a price as current when the feed has not updated in an hour.
+    verified_by: [freshness-test]
+```
+
+Validation rejects an outcome that names no test, or names one that does not exist. That is the whole point: a refusal nothing verifies is a sentence, not a bar, and a pack full of them reads as rigorous while leaving the critic nothing but its own judgment — the failure this format exists to prevent.
+
+Compiling without them is still legal, because packs predate this contract and a request may genuinely carry none. It is simply weaker, and the compiler is told to elicit rather than invent: `frame-failure` interviews the user about consequences in plain language, never about technique. That is consistent with the escalation rule rather than an exception to it — `value_conflict` is a legitimate thing to ask a human about, and "what outcome do you refuse to accept" is exactly that, while "which library" never is.
+
 ## Running slices concurrently
 
 `manifest.execution.maximum_parallel_builders` is the ceiling on how many slices hold an agent turn at once. It must be an integer between 1 and 8, and a pack that omits it runs one slice at a time — a pack compiled against serial execution keeps it.

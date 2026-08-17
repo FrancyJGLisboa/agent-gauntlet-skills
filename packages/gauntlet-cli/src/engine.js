@@ -154,6 +154,28 @@ export function parallelBuilders(validation) {
   if (!Number.isInteger(declared) || declared < 1) return 1;
   return Math.min(declared, MAX_PARALLEL_BUILDERS);
 }
+// The outcomes a subject-matter expert refuses to accept are the one part of a pack
+// that cannot be reconstructed from evidence, and the part most easily reduced to
+// decoration. Each must name the tests that would catch it, and those tests must
+// exist: a refused outcome nothing verifies is a sentence, not a bar.
+function validateRefusedOutcomes(documents, file, errors) {
+  const declared = asArray(documents['objective.yaml']?.refused_outcomes);
+  if (!declared.length) return;
+  const tests = new Set(asArray(documents['acceptance-tests.yaml']?.tests).map(t => t?.id));
+  const seen = new Set();
+  for (const [i, outcome] of declared.entries()) {
+    const at = `refused_outcomes[${i}]`;
+    if (!isObject(outcome)) { errors.push(issue('REFUSED_OUTCOME', 'Each refused outcome must be a mapping', file, at)); continue; }
+    requireKeys(outcome, ['id', 'statement', 'verified_by'], file, errors);
+    if (outcome.id !== undefined) {
+      if (seen.has(outcome.id)) errors.push(issue('REFUSED_OUTCOME', `Duplicate refused outcome id: ${outcome.id}`, file, `${at}.id`));
+      seen.add(outcome.id);
+    }
+    const verifiers = asArray(outcome.verified_by);
+    if (!verifiers.length) errors.push(issue('REFUSED_OUTCOME_UNVERIFIED', `Refused outcome ${outcome.id ?? i} names no test that would catch it`, file, `${at}.verified_by`));
+    for (const id of verifiers) if (!tests.has(id)) errors.push(issue('REFUSED_OUTCOME_UNKNOWN_TEST', `Refused outcome ${outcome.id ?? i} references unknown test: ${id}`, file, `${at}.verified_by`));
+  }
+}
 function validateFinalVerification(doc, file, errors) {
   if (doc?.clean_room !== true) return;
   if ('runs' in doc && (!Number.isInteger(doc.runs) || doc.runs < 2)) errors.push(issue('CLEAN_ROOM_RUNS', 'A clean room must be exercised at least twice; one run proves nothing about reproducibility', file, 'runs'));
@@ -312,6 +334,7 @@ export function validatePack(manifestPath = '.gauntlet/manifest.yaml') {
   if (documents['architecture-decisions.yaml']) validateArchitecture(documents['architecture-decisions.yaml'], 'architecture-decisions.yaml', errors);
   if (documents['distribution-contract.yaml']) validateDistribution(documents['distribution-contract.yaml'], 'distribution-contract.yaml', errors);
   if (documents['semantic-mappings.yaml']) validateMappings(documents['semantic-mappings.yaml'], 'semantic-mappings.yaml', errors);
+  if (documents['objective.yaml']) validateRefusedOutcomes(documents, 'objective.yaml', errors);
   if (documents['execution-dag.yaml']) validateDag(documents['execution-dag.yaml'], 'execution-dag.yaml', errors);
   if (documents['critic-protocol.yaml']) validateCriticProtocol(documents, 'critic-protocol.yaml', errors, warnings);
   if (documents['final-verification.yaml']) validateFinalVerification(documents['final-verification.yaml'], 'final-verification.yaml', errors);

@@ -7,7 +7,7 @@ Create all required files under `.gauntlet/`.
 | File | Required content |
 |---|---|
 | `manifest.yaml` | Version, status, inputs, execution limits, authority boundaries, file index |
-| `objective.yaml` | Reconstructed outcome, non-goals, capabilities, constraints, success evidence |
+| `objective.yaml` | Reconstructed outcome, non-goals, capabilities, constraints, success evidence, and `refused_outcomes`: the user's own sentences for what must never happen, each naming the `verified_by` tests that would catch it |
 | `evidence.yaml` | Claim ledger with source, retrieval method, artifact, confidence, falsifier |
 | `reference-contract.yaml` | Inputs, behavior, transformations, outputs, invariants, tests, operations |
 | `target-contracts.yaml` | Per-source schema and semantic contracts |

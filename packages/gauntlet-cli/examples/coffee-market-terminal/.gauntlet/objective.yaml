@@ -1,3 +1,12 @@
 outcome: Deliver a minimal provenance-aware coffee price terminal as an API, web page, npm artifact, and container.
 non_goals: [live commercial data, authentication, trading advice]
 success_evidence: [unit-test, clean-install]
+# What the person asking for this refuses to accept, in their words, each naming the
+# tests that would catch it. Derived from an interview, not from the repository.
+refused_outcomes:
+  - id: unattributed-price
+    statement: It must never show me a price without saying where the number came from.
+    verified_by: [unit-test]
+  - id: undistributable
+    statement: I would stop trusting it if it only worked on the machine it was built on.
+    verified_by: [clean-install]

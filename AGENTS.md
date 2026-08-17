@@ -33,6 +33,7 @@ See [docs/using-on-your-projects.md](docs/using-on-your-projects.md) for driving
 
 ## Repository map
 
+- `skills/frame-failure/`: interviews the user for the outcomes they refuse to accept and writes `gauntlet-request.md`. The only skill that questions the human, and only about consequence, never about technique.
 - `skills/compile-gauntlet/`: converts vague goals and evidence into a complete `.gauntlet/` contract.
 - `skills/run-gauntlet/`: instructs agents to execute an existing pack through the CLI driver.
 - `packages/gauntlet-cli/src/cli.js`: command-line boundary; keep output machine-readable.
@@ -55,9 +56,10 @@ See [docs/using-on-your-projects.md](docs/using-on-your-projects.md) for driving
 7. Only final-verified worktree commits may be integrated into the target branch. A declared clean room is performed by the runtime as repeated detached checkouts of committed content; a re-run inside the builder's worktree is not a clean room.
 8. Repair loops remain bounded to three or fewer attempts per slice.
 9. Proxies, unknowns, unavailable mappings, and speculative claims must never be presented as equivalent or proven.
-10. Qualitative criteria are judged blind against a declared reference bar. The runtime — never an agent — generates the candidate, assigns the A/B labels, and computes agreement; a split or incomplete panel is `INCONCLUSIVE`, which is not approval.
-11. Publishing and deployment require an external authority capability. Agents may prepare but cannot self-authorize release.
-12. Concurrent slices are bounded by `maximum_parallel_builders` (1 to 8; absent means 1). A step transitions only its own slice: a reopen aimed at a slice another step is running is queued until that step settles, and integration is attempted before `verified` is recorded so a base moved by a sibling returns the slice to its clean room instead of merging on a stale verdict. Git operations are serialized by `spawnSync` blocking the event loop; making them asynchronous requires a mutex.
+10. A refused outcome declared in `objective.yaml` must name existing acceptance tests that would catch it. Agents may not invent refused outcomes on the user's behalf; elicit them, or record their absence.
+11. Qualitative criteria are judged blind against a declared reference bar. The runtime — never an agent — generates the candidate, assigns the A/B labels, and computes agreement; a split or incomplete panel is `INCONCLUSIVE`, which is not approval.
+12. Publishing and deployment require an external authority capability. Agents may prepare but cannot self-authorize release.
+13. Concurrent slices are bounded by `maximum_parallel_builders` (1 to 8; absent means 1). A step transitions only its own slice: a reopen aimed at a slice another step is running is queued until that step settles, and integration is attempted before `verified` is recorded so a base moved by a sibling returns the slice to its clean room instead of merging on a stale verdict. Git operations are serialized by `spawnSync` blocking the event loop; making them asynchronous requires a mutex.
 
 If a requested change weakens one of these invariants, reject that design and implement a safer alternative.
 

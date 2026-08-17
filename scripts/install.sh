@@ -5,7 +5,7 @@ usage() {
   cat <<'EOF'
 Usage: ./install.sh [all|codex|claude|copilot] [--project PATH] [--copy]
 
-Installs compile-gauntlet and run-gauntlet.
+Installs frame-failure, compile-gauntlet, and run-gauntlet.
 
   all       Codex, Claude Code, and Copilot CLI (default)
   codex     Codex only
@@ -39,7 +39,7 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "$script_dir/.." && pwd)"
 skills_dir="$repo_root/skills"
 
-for skill in compile-gauntlet run-gauntlet; do
+for skill in frame-failure compile-gauntlet run-gauntlet; do
   [[ -f "$skills_dir/$skill/SKILL.md" ]] || {
     echo "Missing $skills_dir/$skill/SKILL.md" >&2
     exit 1
@@ -70,7 +70,7 @@ install_target() {
   destination="$(destination_for "$target")"
   mkdir -p "$destination"
 
-  for skill in compile-gauntlet run-gauntlet; do
+  for skill in frame-failure compile-gauntlet run-gauntlet; do
     source="$skills_dir/$skill"
     installed="$destination/$skill"
     if [[ -e "$installed" || -L "$installed" ]]; then

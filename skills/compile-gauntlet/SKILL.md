@@ -12,6 +12,7 @@ Produce an executable specification, not advice. Treat the user's wording as noi
 - Inspect available repositories, documentation, samples, tests, fixtures, history, and runnable behavior before resolving ambiguity.
 - Separate observed facts, supported inferences, unresolved hypotheses, authority decisions, and constraints.
 - Resolve technical uncertainty through evidence or experiments. Do not convert it into a broad human question.
+- Carry the outcomes the user refuses to accept into `objective.yaml` as `refused_outcomes`, each with an id, the user's own sentence, and the `verified_by` test ids that would catch it. These are the only requirements no repository can supply, and the runtime rejects one that names no test. When a request states none, or states only unfalsifiable ones, invoke `frame-failure` to elicit them rather than inventing them or substituting your own taste: a pack with no refused outcome leaves the critic no bar but its own judgment, which is the failure this format exists to prevent.
 - Prefer behavioral compatibility over architectural imitation.
 - Never label a proxy as equivalent. Classify mappings as `equivalent`, `transformable`, `proxy`, `unavailable`, or `unknown`.
 - During compilation, do not implement the target system. Write the Gauntlet Pack under `.gauntlet/` unless the user names another output location. If the user's request is to build, deliver, reproduce, adapt, or finish the product—not merely to produce a specification—automatically continue into `run-gauntlet` after the pack validates.
