@@ -521,3 +521,21 @@ test('the blind panel dispatches its judges concurrently', async () => {
   assert.equal(result.completed,true);
   assert.equal(peak,3,'all three seats were open at once');
 });
+
+test('every commit the runtime creates carries its own identity', async () => {
+  // cherry-pick and rebase create commits. Relying on an ambient git identity works on
+  // a developer machine, where git derives one from the OS, and fails on a bare CI
+  // runner or container where it cannot — at integration, after every builder, critic,
+  // and clean room has already been paid for. Asserting the committer is portable;
+  // reproducing an underivable identity is not.
+  const root=parallelProject(2);
+  const result=await runGauntlet({manifest:path.join(root,'.gauntlet/manifest.yaml'),adapter:writerAdapter()});
+  assert.equal(result.completed,true);
+  // Select by the runtime's own commit subject, so the harness's seed commits and their
+  // identities cannot influence the result.
+  const committers=spawnSync('git',['log','--format=%s\t%cn <%ce>'],{cwd:root,encoding:'utf8'})
+    .stdout.trim().split('\n').filter(line=>line.startsWith('gauntlet(')).map(line=>line.split('\t')[1]);
+  assert.ok(committers.length>=2,'both slices produced integrated commits');
+  for(const committer of committers)
+    assert.equal(committer,'Agent Gauntlet <gauntlet@local>','a runtime commit must not depend on an ambient identity');
+});

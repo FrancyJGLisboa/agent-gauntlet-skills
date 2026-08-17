@@ -5,8 +5,15 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 function failure(code,message,details={}){const e=new Error(message);e.code=code;e.details=details;return e;}
+// Applied to every invocation rather than to the commands that happen to need it
+// today. cherry-pick and rebase create commits, so without an identity they fail on
+// any machine with no global git config — a fresh container, a CI runner — and they
+// fail at integration, after every builder, critic, and clean room has already been
+// paid for. Callers that want a different identity pass their own -c later in argv,
+// where git's last-wins rule gives it precedence.
+const IDENTITY=['-c','user.name=Agent Gauntlet','-c','user.email=gauntlet@local'];
 function git(args,cwd,{allowFailure=false}={}) {
-  const r=spawnSync('git',args,{cwd,encoding:'utf8',timeout:120000,maxBuffer:16*1024*1024});
+  const r=spawnSync('git',[...IDENTITY,...args],{cwd,encoding:'utf8',timeout:120000,maxBuffer:16*1024*1024});
   if(!allowFailure&&r.status!==0)throw failure('GIT_OPERATION_FAILED',`git ${args[0]} failed`,{stderr:r.stderr?.trim(),cwd});
   return r;
 }

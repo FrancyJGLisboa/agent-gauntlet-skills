@@ -36,7 +36,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      # Install whatever npm pack emitted rather than a hard-coded name: the package was
+      # renamed to @promptcompletion/cli, so a literal glob silently stops matching and
+      # the smoke test starts proving nothing.
       - run: npm pack
         working-directory: packages/gauntlet-cli
-      - run: npm install --global packages/gauntlet-cli/agent-gauntlet-cli-*.tgz
+      - run: npm install --global packages/gauntlet-cli/*.tgz
       - run: gauntlet --help
